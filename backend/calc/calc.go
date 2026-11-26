@@ -1,5 +1,3 @@
-// Package calc holds the calculator's operations. Each returns a rounded
-// result or an *Error whose message the user can act on.
 package calc
 
 import (
@@ -7,7 +5,6 @@ import (
 	"strconv"
 )
 
-// Error is a problem the user can fix; any other error is an internal fault.
 type Error struct{ Message string }
 
 func (calcError *Error) Error() string { return calcError.Message }
@@ -20,8 +17,6 @@ var (
 	errTooLarge     = &Error{"Result is too large to display"}
 )
 
-// finish rejects non-finite results, rounds away float noise (0.1+0.2 -> 0.3)
-// and turns -0 into 0.
 func finish(value float64) (float64, error) {
 	switch {
 	case math.IsNaN(value):
@@ -29,8 +24,6 @@ func finish(value float64) (float64, error) {
 	case math.IsInf(value, 0):
 		return 0, errTooLarge
 	}
-	// Round via the decimal text: value*1e10 loses precision above ~1e9. The parse
-	// cannot fail: 'f' output of a finite float is always a valid number.
 	value, _ = strconv.ParseFloat(strconv.FormatFloat(value, 'f', 10, 64), 64)
 	if value == 0 {
 		return 0, nil
