@@ -11,7 +11,6 @@ docker compose ps
 ```
 
 - Frontend: http://localhost:3000 (hot reload)
-- Backend health: http://localhost:8080/api/health → `{"status":"ok"}`
 
 The frontend calls the backend through the Vite proxy (`/api` → `http://backend:8080`), so no CORS setup is needed.
 
@@ -32,7 +31,6 @@ Every operation has its own endpoint, and the backend does all the math. It is p
 
 | Method | Path | Body | Description |
 |---|---|---|---|
-| GET | `/api/health` | none | `{"status":"ok"}` |
 | POST | `/api/add` | `{"a": 2, "b": 3}` | a + b |
 | POST | `/api/subtract` | `{"a": 2, "b": 3}` | a − b |
 | POST | `/api/multiply` | `{"a": 2, "b": 3}` | a × b |
