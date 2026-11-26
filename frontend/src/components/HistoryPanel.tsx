@@ -70,6 +70,7 @@ export default function HistoryPanel({
                 sx={{
                   minHeight: 44,
                   display: "block",
+                  minWidth: 0,
                   textAlign: "right",
                 }}
               >
@@ -77,6 +78,8 @@ export default function HistoryPanel({
                   component="span"
                   sx={{
                     display: "block",
+                    minWidth: 0,
+                    overflowWrap: "anywhere",
                     fontFamily: MONO_FONT,
                     fontSize: 14,
                     color: "text.secondary",
@@ -88,6 +91,8 @@ export default function HistoryPanel({
                   component="span"
                   sx={{
                     display: "block",
+                    minWidth: 0,
+                    overflowWrap: "anywhere",
                     fontFamily: MONO_FONT,
                     fontSize: 20,
                     fontWeight: 500,

@@ -417,7 +417,7 @@ func (e internalError) Error() string { return string(e) }
 const errUnexpected = internalError("calc: unexpected token after validation")
 
 // round10 rounds to at most 10 decimal places and 15 significant digits, half
-// away from zero, working on the exact decimal expansion of the double so no
+// away from zero, working on the 21-significant-digit expansion of the double so no
 // floating-point arithmetic is involved. math.Pow and V8's Math.pow can differ
 // by 1 ulp; this rounding absorbs that.
 //

@@ -314,7 +314,7 @@ const unexpectedToken = (): Error =>
 
 /**
  * Rounds to at most 10 decimal places and 15 significant digits, half away
- * from zero, working on the exact decimal expansion of the double so no
+ * from zero, working on the 21-significant-digit expansion of the double so no
  * floating-point arithmetic is involved. Math.pow and Go's math.Pow can differ
  * by 1 ulp; this rounding absorbs that.
  *

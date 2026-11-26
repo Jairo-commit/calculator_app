@@ -181,6 +181,23 @@ describe("errors", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("closes the snackbar and shows the field error when an invalid edit is submitted with Enter", async () => {
+    fetchMock.mockRejectedValueOnce(new TypeError("offline"));
+    const app = renderApp();
+    await app.user.type(app.input(), "2 + 2{Enter}");
+    await screen.findByRole("alert");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await app.user.clear(app.input());
+    await app.user.type(app.input(), "12 + × 4{Enter}");
+
+    await waitFor(() =>
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument(),
+    );
+    expect(screen.getByText("Two operators in a row")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("shows the snackbar on a 500 and can dismiss it", async () => {
     fetchMock.mockResolvedValueOnce(
       json(500, { error: "Internal server error" }),

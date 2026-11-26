@@ -82,7 +82,7 @@ func TestRound10(t *testing.T) {
 	}{
 		{0.1 + 0.2, 0.3},
 		{1.0 / 3, 0.3333333333},
-		{2.5e-10, 3e-10},                        // half rounds away from zero at the 10th place
+		{2.5e-10, 3e-10},                        // the double sits slightly above the tie; the exact tie is the 1000000000000005 fixture
 		{2.5e-11, 0},                            // below the 10th place
 		{4.9e-11, 0},                            // keep == 0, first digit < 5
 		{5e-11, 1e-10},                          // keep == 0, first digit >= 5
@@ -90,6 +90,7 @@ func TestRound10(t *testing.T) {
 		{1e15 + 0.5, 1e15},                      // 15 significant digits
 		{1000000000000005, 1.00000000000001e15}, // tie goes up, not half-even
 		{9.999999999999995e14, 1e15},
+		{-5e-11, -1e-10}, // negative, keep == 0, first digit >= 5
 		{1e300, 1e300},
 	}
 	for _, tt := range tests {
