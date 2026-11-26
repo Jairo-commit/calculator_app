@@ -6,7 +6,7 @@ Files that come with this spec:
 
 | File | What it is |
 |---|---|
-| `lib/calculator.ts` | Operation names, op symbols, the keypad definition, `formatResult` and the physical-keyboard map. It does no math. |
+| `lib/calculator.ts` | Operation names, operation symbols, the keypad definition, `formatResult` and the physical-keyboard map. It does no math. |
 | `lib/calculatorState.ts` | The state machine: reducer, request-for-key and display derivation. |
 
 Stack: React, TypeScript, `@mui/material`, Axios (one instance, `baseURL: /api`, 10 s `timeout`) and TanStack Query (`useMutation`, no retries). The frontend never calculates: every result comes from the backend (one endpoint per operation, see §8).
@@ -219,7 +219,7 @@ src/
   lib/calculator.ts              ← operations, KEYPAD, formatResult, keyboard map
   lib/calculatorState.ts         ← reducer, requestFor(state, key), displayOf(state)
   lib/history.ts                 ← history entries, localStorage
-  api/calculate.ts               ← the axios instance (10 s `timeout`, no AbortController) and callOperation(op, operands)
+  api/calculate.ts               ← the axios instance (10 s `timeout`, no AbortController) and callOperation(operation, operands)
   hooks/useCalculator.ts         ← reducer + useMutation; press(key), retry, reuse, clearHistory
   components/
     CalculatorPanel.tsx          ← focusable Paper: display, LinearProgress, Keypad, keyboard handler

@@ -1,8 +1,9 @@
 /** Calculator vocabulary: operations, keypad, physical keys and number formatting. No math here. */
-export type BinaryOp = "add" | "subtract" | "multiply" | "divide" | "power";
-export type UnaryOp = "sqrt" | "percent";
+export type BinaryOperation =
+  "add" | "subtract" | "multiply" | "divide" | "power";
+export type UnaryOperation = "sqrt" | "percent";
 /** An operation is also its endpoint name: POST /api/<operation>. */
-export type Operation = BinaryOp | UnaryOp;
+export type Operation = BinaryOperation | UnaryOperation;
 export type KeyId =
   | "0"
   | "1"
@@ -21,7 +22,7 @@ export type KeyId =
   | "clearEntry"
   | "backspace";
 
-export const OP_SYMBOLS: Record<BinaryOp, string> = {
+export const OPERATION_SYMBOLS: Record<BinaryOperation, string> = {
   add: "+",
   subtract: "−",
   multiply: "×",
@@ -29,16 +30,16 @@ export const OP_SYMBOLS: Record<BinaryOp, string> = {
   power: "^",
 };
 
-export const isBinaryOp = (id: string): id is BinaryOp =>
-  Object.hasOwn(OP_SYMBOLS, id);
+export const isBinaryOperation = (id: string): id is BinaryOperation =>
+  Object.hasOwn(OPERATION_SYMBOLS, id);
 
 const numberFormat = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 10,
 });
 
 /** For backend results: en-US grouping, up to 10 decimals, a true minus sign. */
-export const formatResult = (n: number): string =>
-  numberFormat.format(n).replace(/^-/, "−");
+export const formatResult = (value: number): string =>
+  numberFormat.format(value).replace(/^-/, "−");
 
 export type KeyKind = "num" | "op" | "fn" | "util" | "clear" | "equals";
 export interface KeyDef {
@@ -57,7 +58,7 @@ const key = (
   aria = label,
   extra: Pick<KeyDef, "wide" | "tall"> = {},
 ): KeyDef => ({ id, label, kind, aria, ...extra });
-const digit = (d: KeyId) => key(d, d, "num");
+const digit = (digitId: KeyId) => key(digitId, digitId, "num");
 
 /** The keys in grid order (4 columns); "=" spans two rows and "0" two columns. */
 export const KEYPAD: readonly KeyDef[] = [

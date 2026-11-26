@@ -14,25 +14,29 @@ import {
  * request like the backend does. A token that is not a key is typed digit by digit.
  */
 function run(keys: string, from: State = initialState()): State {
-  let s = from;
+  let state = from;
   for (const token of keys.split(" ")) {
-    for (const k of keyIdFor(token) ? [token] : [...token]) {
-      const id = keyIdFor(k)!;
-      const request = requestFor(s, id);
+    for (const keyName of keyIdFor(token) ? [token] : [...token]) {
+      const id = keyIdFor(keyName)!;
+      const request = requestFor(state, id);
       if (!request) {
-        s = reducer(s, { type: "key", id });
+        state = reducer(state, { type: "key", id });
         continue;
       }
-      const answer = evaluate(request.op, request.a, request.b);
-      s = reducer(
-        s,
+      const answer = evaluate(
+        request.operation,
+        request.firstOperand,
+        request.secondOperand,
+      );
+      state = reducer(
+        state,
         "error" in answer
           ? { type: "rejected", message: answer.error }
           : { type: "succeeded", request, result: answer.result },
       );
     }
   }
-  return s;
+  return state;
 }
 
 const shown = (keys: string) => {
@@ -94,10 +98,10 @@ describe("calculator state", () => {
   });
 
   it("keeps the 8 newest calculations", () => {
-    const s = run("1 + 1 = ".repeat(8) + "9 r");
+    const state = run("1 + 1 = ".repeat(8) + "9 r");
 
-    expect(s.history).toHaveLength(8);
-    expect(s.history[0]).toEqual({ expr: "√9", result: 3 });
+    expect(state.history).toHaveLength(8);
+    expect(state.history[0]).toEqual({ expr: "√9", result: 3 });
     expect(run("15 %").history[0].expr).toBe("15%");
   });
 
@@ -106,7 +110,7 @@ describe("calculator state", () => {
       displayOf(reducer(run("7"), { type: "reuse", result: 1234.5 })).value,
     ).toBe("1,234.5");
 
-    const s = reducer(run("2 +"), { type: "reuse", result: 8 });
-    expect(displayOf(run("=", s)).value).toBe("10");
+    const reused = reducer(run("2 +"), { type: "reuse", result: 8 });
+    expect(displayOf(run("=", reused)).value).toBe("10");
   });
 });

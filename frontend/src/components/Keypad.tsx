@@ -40,12 +40,12 @@ export default function Keypad({ loading, onPress }: KeypadProps) {
       }}
     >
       {KEYPAD.map(({ id, label, kind, aria, wide, tall }) => {
-        const c = kind === "equals" ? undefined : COLORS[kind];
+        const colors = kind === "equals" ? undefined : COLORS[kind];
         const waiting = kind === "equals" && loading;
         return (
           <Button
             key={id}
-            variant={c?.border ? "outlined" : "contained"}
+            variant={colors?.border ? "outlined" : "contained"}
             disableElevation={kind !== "equals"}
             disabled={waiting}
             aria-label={aria}
@@ -58,11 +58,14 @@ export default function Keypad({ loading, onPress }: KeypadProps) {
               textTransform: "none",
               gridColumn: wide ? "span 2" : undefined,
               gridRow: tall ? "span 2" : undefined,
-              ...(c && {
-                bgcolor: c.bg,
-                color: c.color,
-                borderColor: c.border,
-                "&:hover": { bgcolor: c.hover, borderColor: c.border },
+              ...(colors && {
+                bgcolor: colors.bg,
+                color: colors.color,
+                borderColor: colors.border,
+                "&:hover": {
+                  bgcolor: colors.hover,
+                  borderColor: colors.border,
+                },
               }),
             }}
           >

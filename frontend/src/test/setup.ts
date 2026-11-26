@@ -5,15 +5,17 @@ import { api } from "../api/calculate";
 
 let width = 1280;
 /** Sets the viewport width the matchMedia stub reports. */
-export const setViewportWidth = (px: number) => {
-  width = px;
+export const setViewportWidth = (pixels: number) => {
+  width = pixels;
 };
 
 window.matchMedia = (query: string) => {
-  const min = /\(min-width:\s*([\d.]+)px\)/.exec(query);
-  const max = /\(max-width:\s*([\d.]+)px\)/.exec(query);
+  const minWidthMatch = /\(min-width:\s*([\d.]+)px\)/.exec(query);
+  const maxWidthMatch = /\(max-width:\s*([\d.]+)px\)/.exec(query);
   return {
-    matches: !(min && width < +min[1]) && !(max && width > +max[1]),
+    matches:
+      !(minWidthMatch && width < +minWidthMatch[1]) &&
+      !(maxWidthMatch && width > +maxWidthMatch[1]),
     addEventListener: () => {},
     removeEventListener: () => {},
     addListener: () => {},

@@ -48,14 +48,15 @@ const failingOnce = (adapter: Adapter): Adapter => {
 function heldBackend() {
   let answer!: () => void;
   const adapter = stubBackend(
-    (c) => new Promise((resolve) => (answer = () => resolve(fakeBackend(c)))),
+    (config) =>
+      new Promise((resolve) => (answer = () => resolve(fakeBackend(config)))),
   );
   return { adapter, answer: () => answer() };
 }
 
 /** The display shows exactly `text` (toHaveTextContent alone matches substrings). */
-const shows = (el: HTMLElement, text: string) =>
-  expect(el).toHaveTextContent(new RegExp(`^${text}$`));
+const shows = (element: HTMLElement, text: string) =>
+  expect(element).toHaveTextContent(new RegExp(`^${text}$`));
 
 const snackbar = () => screen.queryByText(/Couldn't reach the server/);
 
@@ -101,7 +102,7 @@ describe("keypad and keyboard", () => {
     await app.user.keyboard("{Enter}");
 
     await waitFor(() => shows(app.value(), "1,001"));
-    expect(backend.mock.calls.map(([c]) => bodyOf(c))).toEqual([
+    expect(backend.mock.calls.map(([config]) => bodyOf(config))).toEqual([
       { a: 999, b: 1 },
       { a: 1000, b: 1 },
     ]);
@@ -132,7 +133,7 @@ describe("errors", () => {
     await app.user.click(screen.getByRole("button", { name: "Retry" }));
 
     await waitFor(() => shows(app.value(), "5"));
-    expect(backend.mock.calls.map(([c]) => bodyOf(c))).toEqual([
+    expect(backend.mock.calls.map(([config]) => bodyOf(config))).toEqual([
       { a: 2, b: 3 },
       { a: 2, b: 3 },
     ]);
@@ -145,7 +146,7 @@ describe("errors", () => {
       HISTORY_KEY,
       JSON.stringify([{ expr: "2 + 3", result: 5 }]),
     );
-    stubBackend(failingOnce((c) => reply(c, 500, {})));
+    stubBackend(failingOnce((config) => reply(config, 500, {})));
     const app = renderApp();
 
     await app.click("2", "Plus", "3", "Equals");
@@ -176,7 +177,7 @@ describe("errors", () => {
     expect(screen.getByRole("button", { name: "Equals" })).toBeDisabled();
     await app.click("Clear");
     answer();
-    await act(() => new Promise((r) => setTimeout(r)));
+    await act(() => new Promise((resolve) => setTimeout(resolve)));
 
     expect(backend).toHaveBeenCalledTimes(1);
     shows(app.value(), "0");

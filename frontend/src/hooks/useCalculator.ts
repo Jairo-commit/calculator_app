@@ -15,7 +15,8 @@ export function useCalculator() {
   const [state, dispatch] = useReducer(reducer, undefined, initialState);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const { mutate, reset, isPending, variables } = useMutation({
-    mutationFn: ({ op, a, b }: Request) => callOperation(op, { a, b }),
+    mutationFn: ({ operation, firstOperand, secondOperand }: Request) =>
+      callOperation(operation, { firstOperand, secondOperand }),
     retry: false,
   });
 

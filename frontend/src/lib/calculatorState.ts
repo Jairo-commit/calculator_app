@@ -1,9 +1,9 @@
 /** The calculator's state machine: pure functions, no React and no HTTP. */
 import {
-  OP_SYMBOLS,
+  OPERATION_SYMBOLS,
   formatResult,
-  isBinaryOp,
-  type BinaryOp,
+  isBinaryOperation,
+  type BinaryOperation,
   type KeyId,
   type Operation,
 } from "./calculator";
@@ -13,10 +13,10 @@ const MAX_DIGITS = 15;
 
 /** One backend call, and the key that asked for it. */
 export interface Request {
-  op: Operation;
-  a: number;
+  operation: Operation;
+  firstOperand: number;
   /** Absent for √ and %. */
-  b?: number;
+  secondOperand?: number;
   /** The history text, e.g. "2 + 3" or "√9". */
   label: string;
   /** An operator chains from the result, "equals" finishes, √ and % stay put. */
@@ -30,7 +30,7 @@ export interface State {
   /** True when the next digit starts a new number. */
   fresh: boolean;
   /** The operator waiting for its second operand, and the first one. */
-  pending: { op: BinaryOp; value: number; text: string } | null;
+  pending: { operation: BinaryOperation; value: number; text: string } | null;
   /** True once an operand is on screen since the operator was pressed. */
   ready: boolean;
   /** A 400 message; replaces the display until a digit, C or CE. */
@@ -62,18 +62,18 @@ export const initialState = (): State => ({
   history: loadHistory(),
 });
 
-function typeChar(s: State, char: string): State {
-  const base = s.fresh ? "" : s.text;
-  if (char === "." && base.includes(".")) return s;
+function typeChar(state: State, char: string): State {
+  const base = state.fresh ? "" : state.text;
+  if (char === "." && base.includes(".")) return state;
   const text =
     char === "."
       ? `${base || "0"}.`
       : base === "" || base === "0"
         ? char
         : base + char;
-  if (text.replace(".", "").length > MAX_DIGITS) return s;
+  if (text.replace(".", "").length > MAX_DIGITS) return state;
   return {
-    ...s,
+    ...state,
     text,
     value: Number(text),
     fresh: false,
@@ -83,25 +83,26 @@ function typeChar(s: State, char: string): State {
   };
 }
 
-function press(s: State, id: KeyId): State {
-  if (id === "clear") return { ...BLANK, history: s.history };
+function press(state: State, id: KeyId): State {
+  if (id === "clear") return { ...BLANK, history: state.history };
   if (id === "clearEntry") {
-    return { ...s, ...BLANK, pending: s.pending };
+    return { ...state, ...BLANK, pending: state.pending };
   }
-  if (/^\d$/.test(id)) return typeChar(s, id);
-  if (s.error !== null) return s;
-  if (id === "decimal") return typeChar(s, ".");
+  if (/^\d$/.test(id)) return typeChar(state, id);
+  if (state.error !== null) return state;
+  if (id === "decimal") return typeChar(state, ".");
   if (id === "backspace") {
-    const text = s.text.slice(0, -1) || "0";
-    return s.fresh ? s : { ...s, text, value: Number(text) };
+    const text = state.text.slice(0, -1) || "0";
+    return state.fresh ? state : { ...state, text, value: Number(text) };
   }
   // "=", √ and % only ever send a request (see requestFor), and so does an
   // operator with an operand ready; the rest is local.
-  if (!isBinaryOp(id)) return s;
-  if (s.pending) return { ...s, pending: { ...s.pending, op: id } };
+  if (!isBinaryOperation(id)) return state;
+  if (state.pending)
+    return { ...state, pending: { ...state.pending, operation: id } };
   return {
-    ...s,
-    pending: { op: id, value: s.value, text: s.text },
+    ...state,
+    pending: { operation: id, value: state.value, text: state.text },
     fresh: true,
     ready: false,
     done: null,
@@ -109,77 +110,99 @@ function press(s: State, id: KeyId): State {
 }
 
 /** The backend call a key needs, or null when it only changes local state. */
-export function requestFor(s: State, id: KeyId): Request | null {
-  if (s.error !== null) return null;
+export function requestFor(state: State, id: KeyId): Request | null {
+  if (state.error !== null) return null;
   if (id === "sqrt") {
-    return { op: id, a: s.value, label: `√${s.text}`, next: id };
+    return {
+      operation: id,
+      firstOperand: state.value,
+      label: `√${state.text}`,
+      next: id,
+    };
   }
   if (id === "percent") {
-    return { op: id, a: s.value, label: `${s.text}%`, next: id };
+    return {
+      operation: id,
+      firstOperand: state.value,
+      label: `${state.text}%`,
+      next: id,
+    };
   }
-  if (!(isBinaryOp(id) || id === "equals") || !s.pending || !s.ready) {
+  if (
+    !(isBinaryOperation(id) || id === "equals") ||
+    !state.pending ||
+    !state.ready
+  ) {
     return null;
   }
-  const { op, value, text } = s.pending;
+  const { operation, value, text } = state.pending;
   return {
-    op,
-    a: value,
-    b: s.value,
-    label: `${text} ${OP_SYMBOLS[op]} ${s.text}`,
+    operation,
+    firstOperand: value,
+    secondOperand: state.value,
+    label: `${text} ${OPERATION_SYMBOLS[operation]} ${state.text}`,
     next: id,
   };
 }
 
-function applyResult(s: State, r: Request, result: number): State {
+function applyResult(state: State, request: Request, result: number): State {
   const text = formatResult(result);
   const shown: State = {
-    ...s,
+    ...state,
     text,
     value: result,
     fresh: true,
     ready: true,
     error: null,
     done: null,
-    history: [{ expr: r.label, result }, ...s.history].slice(0, HISTORY_LIMIT),
+    history: [{ expr: request.label, result }, ...state.history].slice(
+      0,
+      HISTORY_LIMIT,
+    ),
   };
-  if (r.next === "equals") {
-    return { ...shown, pending: null, ready: false, done: `${r.label} =` };
-  }
-  if (isBinaryOp(r.next)) {
+  if (request.next === "equals") {
     return {
       ...shown,
-      pending: { op: r.next, value: result, text },
+      pending: null,
+      ready: false,
+      done: `${request.label} =`,
+    };
+  }
+  if (isBinaryOperation(request.next)) {
+    return {
+      ...shown,
+      pending: { operation: request.next, value: result, text },
       ready: false,
     };
   }
   return shown;
 }
 
-export function reducer(s: State, action: Action): State {
+export function reducer(state: State, action: Action): State {
   switch (action.type) {
     case "key":
-      return press(s, action.id);
+      return press(state, action.id);
     case "succeeded":
-      return applyResult(s, action.request, action.result);
+      return applyResult(state, action.request, action.result);
     case "rejected":
       return {
         ...BLANK,
-        history: s.history,
+        history: state.history,
         error: action.message,
         fresh: true,
       };
     case "reuse":
       return {
-        ...s,
+        ...state,
         text: formatResult(action.result),
         value: action.result,
         fresh: true,
-        ready: s.pending !== null,
+        ready: state.pending !== null,
         error: null,
         done: null,
       };
     case "clearHistory":
-      return { ...s, history: [] };
+      return { ...state, history: [] };
   }
 }
 
@@ -190,10 +213,10 @@ export interface Display {
   isError: boolean;
 }
 
-export const displayOf = (s: State): Display => ({
-  pending: s.pending
-    ? `${s.pending.text} ${OP_SYMBOLS[s.pending.op]}`
-    : (s.done ?? ""),
-  value: s.error ?? s.text,
-  isError: s.error !== null,
+export const displayOf = (state: State): Display => ({
+  pending: state.pending
+    ? `${state.pending.text} ${OPERATION_SYMBOLS[state.pending.operation]}`
+    : (state.done ?? ""),
+  value: state.error ?? state.text,
+  isError: state.error !== null,
 });

@@ -12,25 +12,28 @@ export type Adapter = (config: Config) => Promise<AxiosResponse>;
 
 export const DIVIDE_BY_ZERO = "Can’t divide by zero";
 
-const OPS: Record<Operation, (a: number, b: number) => number> = {
-  add: (a, b) => a + b,
-  subtract: (a, b) => a - b,
-  multiply: (a, b) => a * b,
-  divide: (a, b) => a / b,
-  power: (a, b) => a ** b,
+const OPERATIONS: Record<
+  Operation,
+  (firstOperand: number, secondOperand: number) => number
+> = {
+  add: (firstOperand, secondOperand) => firstOperand + secondOperand,
+  subtract: (firstOperand, secondOperand) => firstOperand - secondOperand,
+  multiply: (firstOperand, secondOperand) => firstOperand * secondOperand,
+  divide: (firstOperand, secondOperand) => firstOperand / secondOperand,
+  power: (firstOperand, secondOperand) => firstOperand ** secondOperand,
   sqrt: Math.sqrt,
-  percent: (a) => a / 100,
+  percent: (firstOperand) => firstOperand / 100,
 };
 
 /** What the Go backend answers for an operation. */
 export function evaluate(
-  op: Operation,
-  a: number,
-  b = 0,
+  operation: Operation,
+  firstOperand: number,
+  secondOperand = 0,
 ): { result: number } | { error: string } {
-  return op === "divide" && b === 0
+  return operation === "divide" && secondOperand === 0
     ? { error: DIVIDE_BY_ZERO }
-    : { result: OPS[op](a, b) };
+    : { result: OPERATIONS[operation](firstOperand, secondOperand) };
 }
 
 /** Settles like axios: a response for 2xx, an AxiosError carrying it otherwise. */
@@ -62,8 +65,15 @@ export const fail =
 export const bodyOf = (config: Config): unknown => JSON.parse(config.data);
 
 export const fakeBackend: Adapter = (config) => {
-  const { a, b } = bodyOf(config) as { a: number; b?: number };
-  const answer = evaluate((config.url ?? "").slice(1) as Operation, a, b);
+  const { a: firstOperand, b: secondOperand } = bodyOf(config) as {
+    a: number;
+    b?: number;
+  };
+  const answer = evaluate(
+    (config.url ?? "").slice(1) as Operation,
+    firstOperand,
+    secondOperand,
+  );
   return reply(config, "error" in answer ? 400 : 200, answer);
 };
 

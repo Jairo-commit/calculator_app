@@ -13,7 +13,10 @@ export function loadHistory(): HistoryEntry[] {
       localStorage.getItem(HISTORY_KEY) ?? "[]",
     );
     return saved
-      .filter((e) => typeof e.expr === "string" && Number.isFinite(e.result))
+      .filter(
+        (entry) =>
+          typeof entry.expr === "string" && Number.isFinite(entry.result),
+      )
       .slice(0, HISTORY_LIMIT);
   } catch {
     return [];

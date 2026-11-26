@@ -18,7 +18,7 @@ import HistoryPanel from "./components/HistoryPanel";
 import { useCalculator } from "./hooks/useCalculator";
 
 export default function App() {
-  const calc = useCalculator();
+  const calculator = useCalculator();
   const isMobile = useMediaQuery(useTheme().breakpoints.down("md"), {
     noSsr: true,
   });
@@ -29,20 +29,20 @@ export default function App() {
   // Focus the calculator on mount and when a request ends: the "=" key that
   // was clicked is disabled while loading, so focus would be lost.
   useEffect(() => {
-    if (!calc.loading) panelRef.current?.focus();
-  }, [calc.loading]);
+    if (!calculator.loading) panelRef.current?.focus();
+  }, [calculator.loading]);
 
   const history = (
     <HistoryPanel
-      history={calc.history}
-      disabled={calc.loading}
+      history={calculator.history}
+      disabled={calculator.loading}
       onReuse={(result) => {
-        calc.reuse(result);
+        calculator.reuse(result);
         setDrawerOpen(false);
         focusPanel();
       }}
       onClear={() => {
-        calc.clearHistory();
+        calculator.clearHistory();
         focusPanel();
       }}
     />
@@ -80,9 +80,9 @@ export default function App() {
           alignItems="flex-start"
         >
           <CalculatorPanel
-            onPress={calc.press}
-            loading={calc.loading}
-            display={calc.display}
+            onPress={calculator.press}
+            loading={calculator.loading}
+            display={calculator.display}
             panelRef={panelRef}
           />
           {!isMobile && (
@@ -107,7 +107,7 @@ export default function App() {
       )}
 
       <Snackbar
-        open={calc.snackbarOpen}
+        open={calculator.snackbarOpen}
         anchorOrigin={{
           vertical: isMobile ? "top" : "bottom",
           horizontal: "center",
@@ -119,7 +119,7 @@ export default function App() {
               color="inherit"
               size="small"
               onClick={() => {
-                calc.retry();
+                calculator.retry();
                 focusPanel();
               }}
             >
@@ -130,7 +130,7 @@ export default function App() {
               size="small"
               aria-label="Dismiss"
               onClick={() => {
-                calc.dismiss();
+                calculator.dismiss();
                 focusPanel();
               }}
             >

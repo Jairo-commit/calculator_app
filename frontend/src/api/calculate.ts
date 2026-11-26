@@ -7,22 +7,26 @@ export class ApiValidationError extends Error {}
 /** The one HTTP client; the Vite proxy sends /api to the backend. */
 export const api = axios.create({ baseURL: "/api", timeout: 10_000 });
 
-/** POST /api/<op>. A 400 with an error message becomes ApiValidationError; anything else (network, timeout, 5xx) is rethrown as is. */
+/** POST /api/<operation>. A 400 with an error message becomes ApiValidationError; anything else (network, timeout, 5xx) is rethrown as is. */
 export async function callOperation(
-  op: Operation,
-  operands: { a: number; b?: number },
+  operation: Operation,
+  operands: { firstOperand: number; secondOperand?: number },
 ): Promise<number> {
   try {
-    const { data } = await api.post<{ result: number }>(`/${op}`, operands);
+    // The wire contract names the operands a and b.
+    const { data } = await api.post<{ result: number }>(`/${operation}`, {
+      a: operands.firstOperand,
+      b: operands.secondOperand,
+    });
     return data.result;
-  } catch (e) {
+  } catch (error) {
     if (
-      axios.isAxiosError(e) &&
-      e.response?.status === 400 &&
-      typeof e.response.data?.error === "string"
+      axios.isAxiosError(error) &&
+      error.response?.status === 400 &&
+      typeof error.response.data?.error === "string"
     ) {
-      throw new ApiValidationError(e.response.data.error);
+      throw new ApiValidationError(error.response.data.error);
     }
-    throw e;
+    throw error;
   }
 }
