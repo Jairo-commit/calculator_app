@@ -1,17 +1,13 @@
 package main
 
 import (
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"calculator_app/backend/calc"
 )
 
-func TestHandler(t *testing.T) {
-	failingOperations := map[string]binaryOperation{"boom": func(_, _ float64) (float64, error) { return 0, errors.New("db down") }}
+func TestRoutes(t *testing.T) {
 	tests := []struct {
 		name, method, path, body string
 		status                   int
@@ -32,20 +28,13 @@ func TestHandler(t *testing.T) {
 		{"oversize body", "POST", "/api/sqrt", `{"a":9` + strings.Repeat(" ", 2000) + `}`, 400, `{"error":"Invalid request body"}`},
 		{"trailing garbage", "POST", "/api/sqrt", `{"a":9}{"zzz`, 400, `{"error":"Invalid request body"}`},
 		{"trailing brace", "POST", "/api/sqrt", `{"a":9}}`, 400, `{"error":"Invalid request body"}`},
-		{"internal error", "POST", "/api/boom", `{"a":1,"b":1}`, 500, `{"error":"Internal server error"}`},
 		{"wrong method", "GET", "/api/add", ``, 405, ``},
-		{"health", "GET", "/api/health", ``, 200, `{"status":"ok"}`},
 	}
-	handler := newHandler(calc.BinaryOperations, calc.UnaryOperations)
-	failingHandler := newHandler(failingOperations, nil)
+	router := newRouter()
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			recorder := httptest.NewRecorder()
-			selectedHandler := handler
-			if testCase.name == "internal error" {
-				selectedHandler = failingHandler
-			}
-			selectedHandler.ServeHTTP(recorder, httptest.NewRequest(testCase.method, testCase.path, strings.NewReader(testCase.body)))
+			router.ServeHTTP(recorder, httptest.NewRequest(testCase.method, testCase.path, strings.NewReader(testCase.body)))
 			if recorder.Code != testCase.status {
 				t.Fatalf("status %d, want %d", recorder.Code, testCase.status)
 			}

@@ -70,14 +70,3 @@ func Sqrt(value float64) (float64, error) {
 }
 
 func Percent(value float64) (float64, error) { return finish(value / 100) }
-
-// BinaryOperations and UnaryOperations are the operations by endpoint name (POST /api/<name>).
-var (
-	BinaryOperations = map[string]func(firstOperand, secondOperand float64) (float64, error){
-		"add": Add, "subtract": Subtract, "multiply": Multiply,
-		"divide": Divide, "power": Power,
-	}
-	UnaryOperations = map[string]func(value float64) (float64, error){
-		"sqrt": Sqrt, "percent": Percent,
-	}
-)
