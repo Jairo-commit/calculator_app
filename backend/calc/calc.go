@@ -2,7 +2,10 @@
 // result or an *Error whose message the user can act on.
 package calc
 
-import "math"
+import (
+	"math"
+	"strconv"
+)
 
 // Error is a problem the user can fix; any other error is an internal fault.
 type Error struct{ Message string }
@@ -26,9 +29,8 @@ func finish(x float64) (float64, error) {
 	case math.IsInf(x, 0):
 		return 0, errTooLarge
 	}
-	if math.Abs(x) < 1e15 {
-		x = math.Round(x*1e10) / 1e10
-	}
+	// Round via the decimal text: x*1e10 loses precision above ~1e9.
+	x, _ = strconv.ParseFloat(strconv.FormatFloat(x, 'f', 10, 64), 64)
 	if x == 0 {
 		return 0, nil
 	}

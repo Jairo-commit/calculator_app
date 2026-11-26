@@ -46,7 +46,7 @@ func serve(needsB bool, op binaryOp) http.HandlerFunc {
 		var in operands
 		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10))
 		dec.DisallowUnknownFields()
-		if err := dec.Decode(&in); err != nil {
+		if err := dec.Decode(&in); err != nil || dec.More() {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
 			return
 		}

@@ -41,7 +41,7 @@ Every operation has its own endpoint, and the backend does all the math. It is p
 | POST | `/api/sqrt` | `{"a": 9}` | square root of a |
 | POST | `/api/percent` | `{"a": 15}` | a ÷ 100 |
 
-A success is `200 {"result": 5}`. Results are rounded to at most 10 decimal places (values of 1e15 or more are left as they are), and `-0` becomes `0`.
+A success is `200 {"result": 5}`. Results are rounded to at most 10 decimal places, and `-0` becomes `0`.
 
 ```bash
 curl -s -X POST localhost:8080/api/add -H 'Content-Type: application/json' \

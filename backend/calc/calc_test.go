@@ -18,6 +18,8 @@ func TestResults(t *testing.T) {
 		{"sqrt", func() (float64, error) { return Sqrt(9) }, 3},
 		{"percent", func() (float64, error) { return Percent(15) }, 0.15},
 		{"big values are not rounded", func() (float64, error) { return Add(1e15, 0.5) }, 1e15 + 0.5},
+		{"large integers stay exact", func() (float64, error) { return Add(994399757, 0) }, 994399757},
+		{"larger integers stay exact", func() (float64, error) { return Multiply(7439835882, 1) }, 7439835882},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
