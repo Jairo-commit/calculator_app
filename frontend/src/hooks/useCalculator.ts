@@ -49,10 +49,7 @@ export function useCalculator() {
       setSnackbarOpen(false);
       dispatch({ type: "reuse", result });
     },
-    clearHistory: () => {
-      setSnackbarOpen(false);
-      dispatch({ type: "clearHistory" });
-    },
+    clearHistory: () => dispatch({ type: "clearHistory" }),
     snackbarOpen,
     dismiss: () => setSnackbarOpen(false),
     /** Re-sends the request that failed. */

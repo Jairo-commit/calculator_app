@@ -118,7 +118,7 @@ Each key is a real `<Button>` (`disableElevation` except "="), 20px Roboto 500, 
 
 Key behaviour (the state machine in `lib/calculatorState.ts`):
 
-- **Digit or `.`**: if a result is showing (or an error), start a new number; otherwise append. One `.` per number, at most 15 digits, no leading zeros.
+- **Digit or `.`**: if a result is showing, start a new number (a digit also starts one after an error; `.` is ignored then); otherwise append. One `.` per number, at most 15 digits, no leading zeros.
 - **`+ − × ÷ xʸ`**:
   - with an operator pending and a second number entered, compute it, show the result, and make the new key the pending operator;
   - with an operator pending but no second number (two signs in a row), only replace the pending operator;

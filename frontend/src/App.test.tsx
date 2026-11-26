@@ -90,7 +90,7 @@ describe("keypad and keyboard", () => {
     shows(app.value(), "0");
   });
 
-  it("treats Enter as = even when a key button has focus, and sends a grouped result as a number", async () => {
+  it("treats Enter as = and sends a grouped result as a number", async () => {
     const backend = stubBackend();
     const app = renderApp();
 
