@@ -76,17 +76,43 @@ func TestFixtureCases(t *testing.T) {
 	}
 }
 
+func TestRound10(t *testing.T) {
+	tests := []struct {
+		in, want float64
+	}{
+		{0.1 + 0.2, 0.3},
+		{1.0 / 3, 0.3333333333},
+		{2.5e-10, 3e-10},                        // half rounds away from zero at the 10th place
+		{2.5e-11, 0},                            // below the 10th place
+		{4.9e-11, 0},                            // keep == 0, first digit < 5
+		{5e-11, 1e-10},                          // keep == 0, first digit >= 5
+		{0.99999999996, 1},                      // carry through all nines bumps the exponent
+		{1e15 + 0.5, 1e15},                      // 15 significant digits
+		{1000000000000005, 1.00000000000001e15}, // tie goes up, not half-even
+		{9.999999999999995e14, 1e15},
+		{1e300, 1e300},
+	}
+	for _, tt := range tests {
+		if got := round10(tt.in); got != tt.want {
+			t.Errorf("round10(%v) = %v, want %v", tt.in, got, tt.want)
+		}
+	}
+}
+
 func TestRound10IsSymmetricForNegatives(t *testing.T) {
-	for _, x := range []float64{0.12345678905, 2.5e-11, 1234.56789012345, 0.99999999995} {
+	for _, x := range []float64{0.12345678905, 2.5e-11, 1234.56789012345, 0.99999999995, 1000000000000005, 2.2539340290692256e25} {
 		if got, want := round10(-x), -round10(x); got != want {
 			t.Errorf("round10(-%v) = %v, want %v", x, got, want)
 		}
 	}
-	if got := round10(1e15 + 0.5); got != 1e15 {
-		t.Errorf("round10 should keep 15 significant digits from 1e15, got %v", got)
+}
+
+func TestRound10ReturnsZeroAndNonFiniteAsIs(t *testing.T) {
+	if got := round10(0); got != 0 {
+		t.Errorf("round10(0) = %v", got)
 	}
-	if got := round10(-2.2539340290692256e25); got != -2.25393402906923e25 {
-		t.Errorf("round10 should round negatives symmetrically, got %v", got)
+	if got := round10(math.Inf(1)); !math.IsInf(got, 1) {
+		t.Errorf("round10(+Inf) = %v", got)
 	}
 }
 

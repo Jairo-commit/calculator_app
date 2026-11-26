@@ -47,9 +47,9 @@ Errors the user can fix (bad expression, expression over 200 characters, malform
 
 ## Math rules
 
-Operations `+ − × ÷ ^ √ %` (ASCII `+ - * / sqrt` also work), parentheses, and decimals. `%` is a postfix that divides by 100, `^` is right-associative, and results are rounded to 10 decimals. Results of 1e15 or more keep 15 significant digits instead, so Go and JavaScript agree on large powers. The full rules, precedence and error messages are in [DESIGN.md](DESIGN.md) section 9.
+Operations `+ − × ÷ ^ √ %` (ASCII `+ - * / sqrt` also work), parentheses, and decimals. `%` is a postfix that divides by 100, `^` is right-associative, and results are rounded to at most 10 decimal places and 15 significant digits, half away from zero, using the same decimal-string rounding in both engines. The full rules, precedence and error messages are in [DESIGN.md](DESIGN.md) section 9.
 
-The engine exists twice: `backend/calc/calc.go` (the real calculation) and `frontend/src/lib/calculator.ts` (live preview and validation). Both are tested against the same fixture, `backend/calc/testdata/cases.json`, which holds the error-message catalog and every example expression, so the two cannot drift apart. The frontend container mounts it read-only.
+The engine exists twice: `backend/calc/calc.go` (the real calculation) and `frontend/src/lib/calculator.ts` (live preview and validation). Both are tested against the same fixture, `backend/calc/testdata/cases.json`, which holds the error-message catalog and every example expression, so their rules and messages cannot drift apart. One known limit: Go's `math.Pow` and JavaScript's `Math.pow` can differ in the last bit, so for about 2% of `^` results the live preview can differ from the final result in the 15th significant digit. The value shown after `=` always comes from the backend. The frontend container mounts it read-only.
 
 ## Tests, lint and format
 

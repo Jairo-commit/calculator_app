@@ -86,7 +86,12 @@ export function reducer(
     case "CALC_INVALID":
       if (action.expr !== undefined && state.expr !== action.expr) return state;
       // The user's input is never touched on an error.
-      return { ...state, submittedError: action.message, result: null };
+      return {
+        ...state,
+        submittedError: action.message,
+        result: null,
+        serverErrorOpen: false,
+      };
     case "REQUEST_START":
       return { ...state, loading: true, serverErrorOpen: false };
     case "REQUEST_END":
@@ -143,9 +148,6 @@ export function displayOf(state: CalculatorState): Display {
     return { label: "Result", value: "—", tone: "disabled" };
   }
   if (isBlank(state.expr)) {
-    return { label: "Result", value: "0", tone: "disabled" };
-  }
-  if (liveError(state.expr) !== null) {
     return { label: "Result", value: "0", tone: "disabled" };
   }
   const value = preview(state.expr) ?? state.lastPreview;
@@ -257,8 +259,10 @@ export function useCalculator() {
     () => dispatch({ type: "DISMISS_SERVER_ERROR" }),
     [],
   );
-  // REQUEST_START closes the stale snackbar, so retrying is just calculating.
-  const retry = calculate;
+  const retry = useCallback(() => {
+    dispatch({ type: "DISMISS_SERVER_ERROR" });
+    void calculate();
+  }, [calculate]);
 
   const press = useCallback(
     (key: KeyDef) => {

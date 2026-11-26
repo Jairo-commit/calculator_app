@@ -313,13 +313,36 @@ const unexpectedToken = (): Error =>
   new Error("calculator: unexpected token after validation");
 
 /**
- * Rounds to 10 decimal places. Rounds the absolute value so negatives behave
- * like positives (and like the Go engine). |x| >= 1e15 keeps 15 significant
- * digits so Math.pow and Go's math.Pow agree despite last-digit differences.
+ * Rounds to at most 10 decimal places and 15 significant digits, half away
+ * from zero, working on the exact decimal expansion of the double so no
+ * floating-point arithmetic is involved. Math.pow and Go's math.Pow can differ
+ * by 1 ulp; this rounding absorbs that.
+ *
+ * KEEP IDENTICAL to round10 in backend/calc/calc.go: same steps, same order.
  */
 function round10(x: number): number {
-  if (Math.abs(x) >= 1e15) return Number(x.toPrecision(15));
-  return Math.sign(x) * (Math.round(Math.abs(x) * 1e10) / 1e10);
+  if (x === 0 || !Number.isFinite(x)) return x;
+  const [mantissa, exponent] = Math.abs(x).toExponential(20).split("e");
+  const digits = mantissa.replace(".", "").split("").map(Number); // 21 digits
+  let exp = Number(exponent);
+  const keep = Math.min(15, exp + 1 + 10);
+  const sign = x < 0 ? -1 : 1;
+  if (keep < 0 || (keep === 0 && digits[0] < 5)) return 0;
+  if (keep === 0) return sign * Number(`1e${exp + 1}`);
+
+  const kept = digits.slice(0, keep);
+  if (digits[keep] >= 5) {
+    let i = keep - 1;
+    while (i >= 0 && kept[i] === 9) kept[i--] = 0;
+    if (i >= 0) {
+      kept[i]++;
+    } else {
+      kept[0] = 1; // all nines carried: 99.9 -> 100
+      exp++;
+    }
+  }
+  const rounded = Number(`${kept[0]}.${kept.slice(1).join("")}e${exp}`);
+  return Number.isFinite(rounded) ? sign * rounded : x;
 }
 
 /** Evaluates an expression; throws CalcError for anything the user can fix. */

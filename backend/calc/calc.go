@@ -416,18 +416,62 @@ func (e internalError) Error() string { return string(e) }
 
 const errUnexpected = internalError("calc: unexpected token after validation")
 
-// round10 rounds to 10 decimal places, symmetrically for negatives. Magnitudes
-// of 1e15 and above keep 15 significant digits instead, so math.Pow in Go and
-// Math.pow in V8 (which can differ in the last digits) give the same result.
+// round10 rounds to at most 10 decimal places and 15 significant digits, half
+// away from zero, working on the exact decimal expansion of the double so no
+// floating-point arithmetic is involved. math.Pow and V8's Math.pow can differ
+// by 1 ulp; this rounding absorbs that.
+//
+// KEEP IDENTICAL to round10 in frontend/src/lib/calculator.ts: same steps,
+// same order.
 func round10(x float64) float64 {
-	if math.Abs(x) >= 1e15 {
-		r, err := strconv.ParseFloat(strconv.FormatFloat(x, 'g', 15, 64), 64)
-		if err != nil {
-			return x
-		}
-		return r
+	if x == 0 || math.IsInf(x, 0) || math.IsNaN(x) {
+		return x
 	}
-	return math.Copysign(math.Round(math.Abs(x)*1e10)/1e10, x)
+	parts := strings.Split(strconv.FormatFloat(math.Abs(x), 'e', 20, 64), "e")
+	digits := []byte(strings.Replace(parts[0], ".", "", 1)) // 21 digits
+	for i := range digits {
+		digits[i] -= '0'
+	}
+	exp, _ := strconv.Atoi(parts[1])
+	keep := min(15, exp+1+10)
+	sign := 1.0
+	if x < 0 {
+		sign = -1.0
+	}
+	if keep < 0 || (keep == 0 && digits[0] < 5) {
+		return 0
+	}
+	if keep == 0 {
+		r, _ := strconv.ParseFloat("1e"+strconv.Itoa(exp+1), 64)
+		return sign * r
+	}
+
+	kept := digits[:keep]
+	if digits[keep] >= 5 {
+		i := keep - 1
+		for i >= 0 && kept[i] == 9 {
+			kept[i] = 0
+			i--
+		}
+		if i >= 0 {
+			kept[i]++
+		} else {
+			kept[0] = 1 // all nines carried: 99.9 -> 100
+			exp++
+		}
+	}
+	var sb strings.Builder
+	sb.WriteByte('0' + kept[0])
+	sb.WriteByte('.')
+	for _, d := range kept[1:] {
+		sb.WriteByte('0' + d)
+	}
+	sb.WriteString("e" + strconv.Itoa(exp))
+	rounded, _ := strconv.ParseFloat(sb.String(), 64)
+	if math.IsInf(rounded, 0) {
+		return x
+	}
+	return sign * rounded
 }
 
 // Evaluate computes expr. A *Error means the user can fix the expression; any
