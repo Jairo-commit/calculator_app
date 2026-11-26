@@ -28,7 +28,10 @@ After adding npm packages, rebuild so the image picks them up: `docker compose u
 
 ## Backend API
 
-Every operation has its own endpoint, and the backend does all the math.
+Every operation has its own endpoint, and the backend does all the math. It is built on Go's `net/http` with [Huma](https://huma.rocks) (v2, `humago` adapter), so the API documents itself: the OpenAPI 3.1 spec is generated from the Go structs.
+
+- Interactive docs (Swagger UI): http://localhost:8080/api/docs, or through the frontend proxy at http://localhost:3000/api/docs
+- OpenAPI spec: `/api/openapi.json` (also `/api/openapi.yaml`)
 
 | Method | Path | Body | Description |
 |---|---|---|---|
