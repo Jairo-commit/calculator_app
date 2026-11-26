@@ -2,15 +2,19 @@ import { useCallback, useEffect, useReducer, useRef } from "react";
 import {
   ApiValidationError,
   ServerUnavailableError,
-  calculateRemote,
+  callOperation,
+  type Operands,
 } from "../api/calculate";
 import {
-  CalcError,
-  evaluate,
+  OP_SYMBOLS,
   formatResult,
-  liveError,
-  preview,
-  type KeyDef,
+  isBinaryOp,
+  isDigitId,
+  isUnaryOp,
+  type BinaryOp,
+  type DigitId,
+  type KeyId,
+  type UnaryOp,
 } from "../lib/calculator";
 import {
   addEntry,
@@ -19,52 +23,234 @@ import {
   type HistoryEntry,
 } from "../lib/history";
 
+/** Most digits a typed number can have. */
+export const MAX_DIGITS = 15;
+
+/** One call to the backend, with what to do with its answer. */
+export type CalcRequest =
+  | {
+      kind: "binary";
+      op: BinaryOp;
+      a: number;
+      b: number;
+      /** The key that triggered it: an operator to chain, or "=" to finish. */
+      next: BinaryOp | "equals";
+    }
+  | { kind: "unary"; op: UnaryOp; a: number };
+
+/** An operator waiting for its second operand. */
+interface Pending {
+  op: BinaryOp;
+  left: number;
+}
+
 export interface CalculatorState {
-  expr: string;
-  result: number | null;
-  /** Error from pressing Calculate; cleared by the next edit. */
-  submittedError: string | null;
-  /** Last valid preview, kept while the user types an incomplete expression. */
-  lastPreview: string | null;
+  /** The number on screen, as plain text that Number() can read. */
+  display: string;
+  pending: Pending | null;
+  /** "typing": digits append. "result": the next digit starts a new number. */
+  entry: "typing" | "result";
+  /** True once a second operand is on screen since the operator was pressed. */
+  operandReady: boolean;
+  /** Message from the server for input the user can fix; replaces the display. */
+  error: string | null;
+  /** The finished equation shown after "=", e.g. "2 + 3 =". */
+  finished: string | null;
   loading: boolean;
   serverErrorOpen: boolean;
+  /** The request that failed on the server side, for Retry. */
+  lastRequest: CalcRequest | null;
   history: HistoryEntry[];
 }
 
 export type Action =
-  | { type: "EDIT"; expr: string }
-  | { type: "CLEAR" }
-  // expr is set when the message comes from the server, so a late answer for
-  // text the user has since edited can be ignored.
-  | { type: "CALC_INVALID"; message: string; expr?: string }
+  | { type: "KEY"; id: KeyId }
   | { type: "REQUEST_START" }
   | { type: "REQUEST_END" }
-  | { type: "REQUEST_SUCCESS"; expr: string; result: number }
-  | { type: "REQUEST_FAILED" }
+  | { type: "REQUEST_SUCCEEDED"; request: CalcRequest; result: number }
+  | { type: "REQUEST_REJECTED"; message: string }
+  | { type: "REQUEST_FAILED"; request: CalcRequest }
   | { type: "DISMISS_SERVER_ERROR" }
   | { type: "REUSE"; entry: HistoryEntry }
   | { type: "CLEAR_HISTORY" };
 
-export type DisplayTone = "primary" | "disabled";
-
 export interface Display {
-  label: "Result" | "Preview";
+  /** The small line above the value, e.g. "5 +"; empty when there is none. */
+  pending: string;
   value: string;
-  tone: DisplayTone;
+  isError: boolean;
 }
 
-const isBlank = (s: string): boolean => s.trim() === "";
+const INITIAL_NUMBER = {
+  display: "0",
+  pending: null,
+  entry: "typing",
+  operandReady: false,
+  error: null,
+  finished: null,
+} as const satisfies Partial<CalculatorState>;
 
-function edited(state: CalculatorState, expr: string): CalculatorState {
+export function initialState(): CalculatorState {
+  return {
+    ...INITIAL_NUMBER,
+    loading: false,
+    serverErrorOpen: false,
+    lastRequest: null,
+    history: loadHistory(),
+  };
+}
+
+const digitCount = (text: string): number => text.replace(".", "").length;
+
+function typeCharacter(
+  state: CalculatorState,
+  char: DigitId | ".",
+): CalculatorState {
+  const startsFresh = state.entry === "result" || state.error !== null;
+  const base = startsFresh ? "" : state.display;
+  let next: string;
+  if (char === ".") {
+    if (base.includes(".")) return state;
+    next = base === "" ? "0." : `${base}.`;
+  } else {
+    next = base === "" || base === "0" ? char : `${base}${char}`;
+  }
+  if (digitCount(next) > MAX_DIGITS) return state;
   return {
     ...state,
-    expr,
-    result: null,
-    submittedError: null,
-    lastPreview:
-      isBlank(expr) || liveError(expr) !== null
-        ? null
-        : (preview(expr) ?? state.lastPreview),
+    display: next,
+    entry: "typing",
+    operandReady: true,
+    error: null,
+    finished: null,
+  };
+}
+
+function pressOperator(state: CalculatorState, op: BinaryOp): CalculatorState {
+  if (state.pending) {
+    // Two signs in a row swap the pending operation; with an operand ready the
+    // hook sends a request instead (see requestForKey).
+    return state.operandReady
+      ? state
+      : { ...state, pending: { ...state.pending, op } };
+  }
+  return {
+    ...state,
+    pending: { op, left: Number(state.display) },
+    entry: "result",
+    operandReady: false,
+    finished: null,
+  };
+}
+
+function pressKey(state: CalculatorState, id: KeyId): CalculatorState {
+  if (id === "clear") {
+    return {
+      ...state,
+      ...INITIAL_NUMBER,
+      loading: false,
+      serverErrorOpen: false,
+      lastRequest: null,
+    };
+  }
+  if (state.loading) return state;
+
+  if (id === "clearEntry") {
+    return {
+      ...state,
+      display: "0",
+      entry: "typing",
+      operandReady: false,
+      error: null,
+      finished: null,
+    };
+  }
+  if (id === "decimal") return typeCharacter(state, ".");
+  if (isDigitId(id)) return typeCharacter(state, id);
+
+  // After a server-side rejection only a digit, C or CE work.
+  if (state.error !== null) return state;
+
+  if (id === "backspace") {
+    if (state.entry !== "typing") return state;
+    return { ...state, display: state.display.slice(0, -1) || "0" };
+  }
+  if (isBinaryOp(id)) return pressOperator(state, id);
+  // "=", "√" and "%" only ever send a request; see requestForKey.
+  return state;
+}
+
+/** The request a key press needs, or null when it only changes local state. */
+export function requestForKey(
+  state: CalculatorState,
+  id: KeyId,
+): CalcRequest | null {
+  if (state.loading || state.error !== null) return null;
+  const current = Number(state.display);
+  if (isUnaryOp(id)) return { kind: "unary", op: id, a: current };
+
+  const isChain = isBinaryOp(id) || id === "equals";
+  if (!isChain || !state.pending || !state.operandReady) return null;
+  return {
+    kind: "binary",
+    op: state.pending.op,
+    a: state.pending.left,
+    b: current,
+    next: id,
+  };
+}
+
+export function operandsOf(request: CalcRequest): Operands {
+  return request.kind === "binary"
+    ? { a: request.a, b: request.b }
+    : { a: request.a };
+}
+
+function historyEntryFor(request: CalcRequest, result: number): HistoryEntry {
+  if (request.kind === "unary") {
+    const a = formatResult(request.a);
+    return {
+      expr: request.op === "sqrt" ? `√${a}` : `${a}%`,
+      result,
+    };
+  }
+  const { a, b, op } = request;
+  return {
+    expr: `${formatResult(a)} ${OP_SYMBOLS[op]} ${formatResult(b)}`,
+    result,
+  };
+}
+
+function applyResult(
+  state: CalculatorState,
+  request: CalcRequest,
+  result: number,
+): CalculatorState {
+  const shown = {
+    ...state,
+    display: String(result),
+    entry: "result" as const,
+    error: null,
+    finished: null,
+    lastRequest: null,
+    serverErrorOpen: false,
+    history: addEntry(state.history, historyEntryFor(request, result)),
+  };
+  if (request.kind === "unary") return { ...shown, operandReady: true };
+
+  const { a, b, op, next } = request;
+  if (next === "equals") {
+    return {
+      ...shown,
+      pending: null,
+      operandReady: false,
+      finished: `${formatResult(a)} ${OP_SYMBOLS[op]} ${formatResult(b)} =`,
+    };
+  }
+  return {
+    ...shown,
+    pending: { op: next, left: result },
+    operandReady: false,
   };
 }
 
@@ -73,127 +259,57 @@ export function reducer(
   action: Action,
 ): CalculatorState {
   switch (action.type) {
-    case "EDIT":
-      return edited(state, action.expr);
-    case "CLEAR":
-      return {
-        ...state,
-        expr: "",
-        result: null,
-        submittedError: null,
-        lastPreview: null,
-      };
-    case "CALC_INVALID":
-      if (action.expr !== undefined && state.expr !== action.expr) return state;
-      // The user's input is never touched on an error.
-      return {
-        ...state,
-        submittedError: action.message,
-        result: null,
-        serverErrorOpen: false,
-      };
+    case "KEY":
+      return pressKey(state, action.id);
     case "REQUEST_START":
       return { ...state, loading: true, serverErrorOpen: false };
     case "REQUEST_END":
       return { ...state, loading: false };
-    case "REQUEST_SUCCESS":
+    case "REQUEST_SUCCEEDED":
+      return applyResult(state, action.request, action.result);
+    case "REQUEST_REJECTED":
       return {
         ...state,
-        history: addEntry(state.history, {
-          expr: action.expr,
-          result: action.result,
-        }),
-        // Only show the result if the user has not edited since submitting.
-        result: state.expr === action.expr ? action.result : state.result,
+        error: action.message,
+        pending: null,
+        entry: "result",
+        operandReady: false,
+        finished: null,
+        lastRequest: null,
         serverErrorOpen: false,
       };
     case "REQUEST_FAILED":
-      return { ...state, serverErrorOpen: true };
+      return { ...state, serverErrorOpen: true, lastRequest: action.request };
     case "DISMISS_SERVER_ERROR":
       return { ...state, serverErrorOpen: false };
     case "REUSE":
-      return edited(state, action.entry.expr);
+      if (state.loading) return state;
+      return {
+        ...state,
+        display: String(action.entry.result),
+        entry: "result",
+        operandReady: state.pending !== null,
+        error: null,
+        finished: null,
+      };
     case "CLEAR_HISTORY":
       return { ...state, history: [] };
   }
 }
 
-function initialState(): CalculatorState {
-  return {
-    expr: "",
-    result: null,
-    submittedError: null,
-    lastPreview: null,
-    loading: false,
-    serverErrorOpen: false,
-    history: loadHistory(),
-  };
-}
-
-/** The error shown on the field: a submitted one, else a live lexical one. */
-export function fieldErrorOf(state: CalculatorState): string | null {
-  return state.submittedError ?? liveError(state.expr)?.message ?? null;
-}
-
-/** What the result area shows: the first rule that matches. */
+/** What the screen shows for a state. */
 export function displayOf(state: CalculatorState): Display {
-  if (state.result !== null) {
-    return {
-      label: "Result",
-      value: formatResult(state.result),
-      tone: "primary",
-    };
+  const pending = state.pending
+    ? `${formatResult(state.pending.left)} ${OP_SYMBOLS[state.pending.op]}`
+    : (state.finished ?? "");
+  if (state.error !== null) {
+    return { pending, value: state.error, isError: true };
   }
-  if (state.submittedError !== null) {
-    return { label: "Result", value: "—", tone: "disabled" };
-  }
-  if (isBlank(state.expr)) {
-    return { label: "Result", value: "0", tone: "disabled" };
-  }
-  const value = preview(state.expr) ?? state.lastPreview;
-  return value === null
-    ? { label: "Result", value: "0", tone: "disabled" }
-    : { label: "Preview", value, tone: "disabled" };
-}
-
-/**
- * The expression after pressing a key. After a result is showing, digits, ".",
- * "√" and "(" start a new expression while operators, "xʸ" and "%" continue
- * from the result.
- */
-export function nextExpression(
-  expr: string,
-  key: KeyDef,
-  result: number | null,
-): string {
-  if (key.kind === "clear") return "";
-  if (key.id === "backspace") {
-    const chars = Array.from(expr.trimEnd());
-    chars.pop();
-    return chars.join("").trimEnd();
-  }
-
-  const hasResult = result !== null;
-  const startsFresh =
-    hasResult &&
-    (key.kind === "num" || key.id === "sqrt" || key.id === "lparen");
-  const continuesFromResult =
-    hasResult &&
-    (key.kind === "op" || key.id === "pow" || key.id === "percent");
-
-  let base = expr;
-  if (startsFresh) {
-    base = "";
-  } else if (continuesFromResult) {
-    // Exponent notation (1e+21) is not valid input, so wrap the expression.
-    const text = String(result).replace(/^-/, "−");
-    if (text.includes("e")) base = `(${expr})`;
-    // "−2 ^ 2" would read as −(2 ^ 2), so a negative base is parenthesised.
-    else if (key.id === "pow" && result < 0) base = `(${text})`;
-    else base = text;
-  }
-
-  return `${base}${key.insert ?? ""}`.replace(/ {2,}/g, " ").trimStart();
+  const value =
+    state.entry === "result"
+      ? formatResult(Number(state.display))
+      : state.display;
+  return { pending, value, isError: false };
 }
 
 const isAbort = (e: unknown): boolean =>
@@ -207,46 +323,56 @@ export function useCalculator() {
   useEffect(() => saveHistory(state.history), [state.history]);
   useEffect(() => () => controllerRef.current?.abort(), []);
 
-  const { expr } = state;
-
-  const calculate = useCallback(async () => {
+  const send = useCallback(async (request: CalcRequest) => {
     if (loadingRef.current) return;
-    try {
-      evaluate(expr);
-    } catch (e) {
-      if (e instanceof CalcError) {
-        dispatch({ type: "CALC_INVALID", message: e.message });
-        return;
-      }
-      throw e;
-    }
-
     loadingRef.current = true;
     dispatch({ type: "REQUEST_START" });
     const controller = new AbortController();
     controllerRef.current = controller;
     try {
-      const result = await calculateRemote(expr, { signal: controller.signal });
-      dispatch({ type: "REQUEST_SUCCESS", expr, result });
+      const result = await callOperation(request.op, operandsOf(request), {
+        signal: controller.signal,
+      });
+      if (!controller.signal.aborted) {
+        dispatch({ type: "REQUEST_SUCCEEDED", request, result });
+      }
     } catch (e) {
       if (e instanceof ApiValidationError) {
-        dispatch({ type: "CALC_INVALID", message: e.message, expr });
+        dispatch({ type: "REQUEST_REJECTED", message: e.message });
       } else if (e instanceof ServerUnavailableError) {
-        dispatch({ type: "REQUEST_FAILED" });
+        dispatch({ type: "REQUEST_FAILED", request });
       } else if (!isAbort(e)) {
         throw e;
       }
     } finally {
-      loadingRef.current = false;
-      dispatch({ type: "REQUEST_END" });
+      // After C the request is abandoned and a newer one may be in flight.
+      if (controllerRef.current === controller) {
+        controllerRef.current = null;
+        loadingRef.current = false;
+        dispatch({ type: "REQUEST_END" });
+      }
     }
-  }, [expr]);
+  }, []);
 
-  const setExpr = useCallback(
-    (value: string) => dispatch({ type: "EDIT", expr: value }),
-    [],
+  const press = useCallback(
+    (id: KeyId) => {
+      if (id === "clear") {
+        controllerRef.current?.abort();
+        controllerRef.current = null;
+        loadingRef.current = false;
+      }
+      const request = requestForKey(state, id);
+      if (request) void send(request);
+      else dispatch({ type: "KEY", id });
+    },
+    [state, send],
   );
-  const clear = useCallback(() => dispatch({ type: "CLEAR" }), []);
+
+  const retry = useCallback(() => {
+    dispatch({ type: "DISMISS_SERVER_ERROR" });
+    if (state.lastRequest) void send(state.lastRequest);
+  }, [state.lastRequest, send]);
+
   const reuse = useCallback(
     (entry: HistoryEntry) => dispatch({ type: "REUSE", entry }),
     [],
@@ -259,32 +385,14 @@ export function useCalculator() {
     () => dispatch({ type: "DISMISS_SERVER_ERROR" }),
     [],
   );
-  const retry = useCallback(() => {
-    dispatch({ type: "DISMISS_SERVER_ERROR" });
-    void calculate();
-  }, [calculate]);
-
-  const press = useCallback(
-    (key: KeyDef) => {
-      if (key.kind === "clear") clear();
-      else if (key.kind === "equals") void calculate();
-      else setExpr(nextExpression(expr, key, state.result));
-    },
-    [expr, state.result, calculate, clear, setExpr],
-  );
 
   return {
-    expr,
-    setExpr,
     press,
-    calculate,
-    clear,
+    retry,
     reuse,
     clearHistory,
-    retry,
     dismissServerError,
     loading: state.loading,
-    fieldError: fieldErrorOf(state),
     display: displayOf(state),
     history: state.history,
     serverErrorOpen: state.serverErrorOpen,

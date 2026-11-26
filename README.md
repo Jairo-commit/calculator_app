@@ -1,6 +1,6 @@
 # Calculator App
 
-Calculator with a live preview, keypad and history. Full-stack practice project: **React (Vite + TypeScript)** frontend and **Go (net/http)** backend, both running in Docker. Nothing needs to be installed locally except Docker.
+An old-style pocket calculator with one backend endpoint per operation. Full-stack practice project: **React (Vite + TypeScript)** frontend and **Go (net/http)** backend, both running in Docker. Nothing needs to be installed locally except Docker.
 
 ## Run
 
@@ -26,42 +26,98 @@ docker compose down                    # stop everything
 
 After adding npm packages, rebuild so the image picks them up: `docker compose up -d --build frontend`.
 
-## API
+## Backend API
 
-| Method | Path | Description |
-|---|---|---|
-| GET | `/api/health` | `{"status":"ok"}` |
-| POST | `/api/calculate` | Evaluates an expression |
+Every operation has its own endpoint, and the backend does all the math.
+
+| Method | Path | Body | Description |
+|---|---|---|---|
+| GET | `/api/health` | none | `{"status":"ok"}` |
+| POST | `/api/add` | `{"a": 2, "b": 3}` | a + b |
+| POST | `/api/subtract` | `{"a": 2, "b": 3}` | a − b |
+| POST | `/api/multiply` | `{"a": 2, "b": 3}` | a × b |
+| POST | `/api/divide` | `{"a": 6, "b": 3}` | a ÷ b |
+| POST | `/api/power` | `{"a": 2, "b": 10}` | a to the power b |
+| POST | `/api/sqrt` | `{"a": 9}` | square root of a |
+| POST | `/api/percent` | `{"a": 15}` | a ÷ 100 |
+
+A success is `200 {"result": 5}`. Results are rounded to at most 10 decimal places and 15 significant digits, and `-0` becomes `0`.
 
 ```bash
-curl -s -X POST localhost:8080/api/calculate -H 'Content-Type: application/json' \
-  --data '{"expression":"√144 + 2 ^ 3 × 50%"}'
-# 200 {"expression":"√144 + 2 ^ 3 × 50%","result":16}
+curl -s -X POST localhost:8080/api/add -H 'Content-Type: application/json' \
+  --data '{"a":2,"b":3}'
+# 200 {"result":5}
 
-curl -s -X POST localhost:8080/api/calculate -H 'Content-Type: application/json' \
-  --data '{"expression":"48 ÷ 0"}'
+curl -s -X POST localhost:8080/api/divide -H 'Content-Type: application/json' \
+  --data '{"a":1,"b":0}'
 # 400 {"error":"Can’t divide by zero"}
+
+curl -s -X POST localhost:8080/api/sqrt -H 'Content-Type: application/json' \
+  --data '{"a":9}'
+# 200 {"result":3}
+
+curl -s -X POST localhost:8080/api/percent -H 'Content-Type: application/json' \
+  --data '{"a":15}'
+# 200 {"result":0.15}
 ```
 
-Errors the user can fix (bad expression, expression over 200 characters, malformed or oversized body) return `400 {"error": "..."}`. Anything else returns `500 {"error": "Internal server error"}`.
+### Errors
 
-## Math rules
+Anything the user can fix returns `400 {"error": "..."}`:
 
-Operations `+ − × ÷ ^ √ %` (ASCII `+ - * / sqrt` also work), parentheses, and decimals. `%` is a postfix that divides by 100, `^` is right-associative, and results are rounded to at most 10 decimal places and 15 significant digits, half away from zero, using the same decimal-string rounding in both engines. The full rules, precedence and error messages are in [DESIGN.md](DESIGN.md) section 9.
+| Message | When |
+|---|---|
+| Can’t divide by zero | `divide` with `b` = 0 |
+| Can’t take the square root of a negative number | `sqrt` with `a` < 0 |
+| Can’t raise 0 to a negative power | `power` with `a` = 0 and `b` < 0 |
+| Result isn’t a real number | for example `power` of a negative base to a fractional power |
+| Result is too large to display | the result overflows |
+| Enter a number | an operand is missing or `null` |
+| Invalid request body | malformed JSON, an unknown field, a non-number operand, or a body over 1 KiB |
 
-The engine exists twice: `backend/calc/calc.go` (the real calculation) and `frontend/src/lib/calculator.ts` (live preview and validation). Both are tested against the same fixture, `backend/calc/testdata/cases.json`, which holds the error-message catalog and every example expression, so their rules and messages cannot drift apart. One known limit: Go's `math.Pow` and JavaScript's `Math.pow` can differ in the last bit, so for about 2% of `^` results the live preview can differ from the final result in the 15th significant digit. The value shown after `=` always comes from the backend. The frontend container mounts it read-only.
+An unknown path is `404`, a wrong method is `405`, and any other failure returns `500 {"error": "Internal server error"}`. Each request writes one structured log line with its status, duration and operation name (`op`); the operands are never logged.
 
-## Tests, lint and format
+## Backend tests
 
 Everything runs in Docker, so nothing needs to be installed locally.
 
 ```bash
-# Backend
-docker compose run --rm backend gofmt -l .      # must print nothing
-docker compose run --rm backend go vet ./...
-docker compose run --rm backend go test ./...
+docker compose run --rm --no-deps backend gofmt -l .      # must print nothing
+docker compose run --rm --no-deps backend go vet ./...
+docker compose run --rm --no-deps backend go test -count=1 ./...
+```
 
-# Frontend
+## Frontend
+
+React + Vite + MUI, at http://localhost:3000. It works like an old pocket calculator:
+
+1. Enter a number, press an operator (`+ − × ÷ xʸ`), then enter another number.
+2. Pressing a second operator or `=` computes the pending operation through the backend, shows the result and waits for the next number. `2 + 3 +` shows 5.
+3. Pressing two operators in a row just swaps the pending operation.
+4. `√` and `%` act at once on the number on screen. `%` divides by 100, so `80 × 15 %` shows 0.15 and `=` gives 12.
+5. After `=`, a digit starts a new number and an operator continues from the result.
+6. `CE` clears the number being entered and keeps the pending operation, `⌫` removes the last digit, and `C` resets everything.
+
+A small line above the display shows the pending operation (`5 +`) or the finished equation (`2 + 3 =`). An error such as dividing by zero shows its message on the display; a digit, `C` or `CE` recovers. If the server can’t be reached, a snackbar offers Retry and the calculator keeps its state. The history panel (a drawer on phones) keeps the last 8 calculations; clicking one loads its result. The design spec is in [DESIGN.md](DESIGN.md).
+
+### Keyboard shortcuts
+
+| Key | Action |
+|---|---|
+| `0-9`, `.` | digits |
+| `+ - * / ^` | add, subtract, multiply, divide, power |
+| `Enter` or `=` | equals |
+| `Backspace` | ⌫ |
+| `Delete` | CE |
+| `Escape` | C |
+| `r` | √ |
+| `%` | % |
+
+## Frontend tests
+
+Everything runs in Docker, so nothing needs to be installed locally.
+
+```bash
 docker compose run --rm --no-deps frontend npm test
 docker compose run --rm --no-deps frontend npm run lint
 docker compose run --rm --no-deps frontend npm run format:check   # or: npm run format

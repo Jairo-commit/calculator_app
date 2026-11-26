@@ -1,51 +1,47 @@
 import Box from "@mui/material/Box";
 import LinearProgress from "@mui/material/LinearProgress";
 import Paper from "@mui/material/Paper";
-import TextField from "@mui/material/TextField";
-import type { KeyboardEvent, Ref } from "react";
+import { useEffect, type KeyboardEvent, type RefObject } from "react";
 import type { Display } from "../hooks/useCalculator";
-import type { KeyDef } from "../lib/calculator";
-import { MONO_FONT } from "../theme";
+import { keyIdForPhysicalKey, type KeyId } from "../lib/calculator";
 import Keypad from "./Keypad";
 import ResultDisplay from "./ResultDisplay";
 
-const DEFAULT_HELPER =
-  "Enter to calculate · Esc to clear · % divides by 100 (80 × 15% = 12)";
-
 interface CalculatorPanelProps {
-  expr: string;
-  onExprChange: (value: string) => void;
-  onKeyPress: (key: KeyDef) => void;
-  onCalculate: () => void;
-  onClear: () => void;
+  onKeyPress: (id: KeyId) => void;
   loading: boolean;
-  fieldError: string | null;
   display: Display;
-  inputRef: Ref<HTMLInputElement>;
+  /** The focusable calculator; it receives the physical keyboard. */
+  panelRef: RefObject<HTMLDivElement | null>;
 }
 
 export default function CalculatorPanel({
-  expr,
-  onExprChange,
   onKeyPress,
-  onCalculate,
-  onClear,
   loading,
-  fieldError,
   display,
-  inputRef,
+  panelRef,
 }: CalculatorPanelProps) {
-  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      onCalculate();
-    } else if (event.key === "Escape") {
-      onClear();
+  useEffect(() => panelRef.current?.focus(), [panelRef]);
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    // Enter on a focused key already clicks it; handling it too would press twice.
+    if (event.key === "Enter" && event.target instanceof HTMLButtonElement) {
+      return;
     }
+    const id = keyIdForPhysicalKey(event.key);
+    if (id === null) return;
+    event.preventDefault();
+    onKeyPress(id);
   };
 
   return (
     <Paper
+      ref={panelRef}
+      role="group"
+      aria-label="Calculator"
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
       elevation={2}
       sx={{
         flex: { xs: 1, sm: "0 0 auto", md: "1 1 420px" },
@@ -54,6 +50,7 @@ export default function CalculatorPanel({
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
+        outline: "none",
       }}
     >
       <Box
@@ -63,29 +60,8 @@ export default function CalculatorPanel({
           display: "flex",
           flexDirection: "column",
           justifyContent: { xs: "flex-end", sm: "flex-start" },
-          gap: 2,
         }}
       >
-        <TextField
-          id="expression"
-          label="Expression"
-          placeholder="e.g. (12 + 8) × 3"
-          fullWidth
-          value={expr}
-          onChange={(event) => onExprChange(event.target.value)}
-          error={!!fieldError}
-          helperText={fieldError ?? DEFAULT_HELPER}
-          inputRef={inputRef}
-          slotProps={{
-            htmlInput: {
-              inputMode: "decimal",
-              autoComplete: "off",
-              spellCheck: false,
-              onKeyDown: handleKeyDown,
-            },
-            input: { sx: { fontFamily: MONO_FONT, fontSize: 20 } },
-          }}
-        />
         <ResultDisplay {...display} />
       </Box>
       {loading ? (

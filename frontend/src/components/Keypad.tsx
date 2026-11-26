@@ -1,11 +1,11 @@
 import Box from "@mui/material/Box";
-import { KEYPAD, type KeyDef } from "../lib/calculator";
+import { KEYPAD, type KeyId } from "../lib/calculator";
 import { tokens } from "../theme";
 import KeypadButton from "./KeypadButton";
 
 interface KeypadProps {
   loading: boolean;
-  onPress: (key: KeyDef) => void;
+  onPress: (id: KeyId) => void;
 }
 
 export default function Keypad({ loading, onPress }: KeypadProps) {

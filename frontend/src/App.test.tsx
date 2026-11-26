@@ -3,29 +3,15 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
-import { CalcError, evaluate } from "./lib/calculator";
+import { fakeBackend, json } from "./test/fakeBackend";
 import { setViewportWidth } from "./test/setup";
 import { theme } from "./theme";
-
-const json = (status: number, body: unknown) =>
-  new Response(JSON.stringify(body), { status });
-
-/** A fake server that evaluates with the real engine, like the Go backend. */
-function fakeServer(init: RequestInit): Response {
-  const { expression } = JSON.parse(init.body as string);
-  try {
-    return json(200, { result: evaluate(expression) });
-  } catch (e) {
-    if (e instanceof CalcError) return json(400, { error: e.message });
-    throw e;
-  }
-}
 
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
-  fetchMock = vi.fn(async (_url: string, init: RequestInit) =>
-    fakeServer(init),
+  fetchMock = vi.fn(async (url: string, init: RequestInit) =>
+    fakeBackend(url, init),
   );
   vi.stubGlobal("fetch", fetchMock);
 });
@@ -44,158 +30,192 @@ function renderApp() {
   );
   return {
     user,
-    input: () => screen.getByRole("textbox", { name: "Expression" }),
+    calculator: () => screen.getByRole("group", { name: "Calculator" }),
     output: () => screen.getByRole("status"),
+    pending: () => screen.getByTestId("pending"),
     press: async (...labels: string[]) => {
       for (const label of labels) {
-        await user.click(screen.getByRole("button", { name: label }));
+        // The history panel also has a "Clear" button, so stay on the keypad.
+        await user.click(
+          within(screen.getByRole("group", { name: "Calculator" })).getByRole(
+            "button",
+            { name: label },
+          ),
+        );
       }
     },
   };
 }
 
-describe("acceptance expressions typed in the field", () => {
-  it.each([
-    ["(12 + 8) × 3", "60"],
-    ["√144 + 2 ^ 3 × 50%", "16"],
-    ["2 ^ 3 ^ 2", "512"],
-    ["-2 ^ 2", "−4"],
-    ["1250 × 15%", "187.5"],
-  ])("%s = %s", async (expression, expected) => {
-    const app = renderApp();
-
-    await app.user.type(app.input(), `${expression}{Enter}`);
-
-    await waitFor(() =>
-      expect(app.output()).toHaveTextContent(`Result${expected}`),
-    );
-  });
-});
+const expectValue = (app: ReturnType<typeof renderApp>, text: string) =>
+  waitFor(() =>
+    expect(
+      within(app.output()).getByRole("region", { name: "Result value" }),
+    ).toHaveTextContent(new RegExp(`^${text}$`)),
+  );
 
 describe("keypad", () => {
-  it("builds and calculates √144 + 2 ^ 3 × 50%", async () => {
+  it("shows 0 and the keys in the old-calculator layout", () => {
     const app = renderApp();
 
-    await app.press(
-      "Square root",
-      "1",
-      "4",
-      "4",
-      "Plus",
-      "2",
-      "Power",
-      "3",
-      "Multiply",
-      "5",
-      "0",
-      "Percent",
+    expect(app.output()).toHaveTextContent("0");
+    const labels = screen
+      .getAllByRole("button")
+      .filter((b) => app.calculator().contains(b))
+      .map((b) => b.textContent);
+    expect(labels).toEqual(
+      "C CE ⌫ ÷ √ xʸ % × 7 8 9 − 4 5 6 + 1 2 3 = 0 .".split(" "),
     );
-    expect(app.input()).toHaveValue("√144 + 2 ^ 3 × 50%");
-    expect(app.output()).toHaveTextContent("Preview16");
-
-    await app.press("Equals");
-
-    await waitFor(() => expect(app.output()).toHaveTextContent("Result16"));
   });
 
-  it("continues from the result: 2 + 3 =, × 2 = gives 10", async () => {
+  it("2 + 3 = shows 5 and the finished equation", async () => {
     const app = renderApp();
 
     await app.press("2", "Plus", "3", "Equals");
-    await waitFor(() => expect(app.output()).toHaveTextContent("Result5"));
-    await app.press("Multiply", "2");
-    expect(app.input()).toHaveValue("5 × 2");
-    await app.press("Equals");
 
-    await waitFor(() => expect(app.output()).toHaveTextContent("Result10"));
+    await expectValue(app, "5");
+    expect(app.pending()).toHaveTextContent("2 + 3 =");
   });
 
-  it("clears with C and backspaces", async () => {
+  it("2 + 3 + shows 5 with the pending line 5 +", async () => {
+    const app = renderApp();
+
+    await app.press("2", "Plus", "3", "Plus");
+
+    await expectValue(app, "5");
+    expect(app.pending()).toHaveTextContent("5 +");
+  });
+
+  it("swaps the operator when two signs are pressed in a row", async () => {
+    const app = renderApp();
+
+    await app.press("2", "Plus", "Minus", "3", "Equals");
+
+    await expectValue(app, "−1");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/subtract");
+  });
+
+  it("calculates 9 √ and 80 × 15 % =", async () => {
+    const app = renderApp();
+
+    await app.press("9", "Square root");
+    await expectValue(app, "3");
+    await app.press(
+      "Clear",
+      "8",
+      "0",
+      "Multiply",
+      "1",
+      "5",
+      "Percent",
+      "Equals",
+    );
+
+    await expectValue(app, "12");
+  });
+
+  it("removes digits with Backspace and clears the entry with CE", async () => {
     const app = renderApp();
 
     await app.press("1", "2", "Backspace");
-    expect(app.input()).toHaveValue("1");
-    // The history panel also has a "Clear" button, so find the C key by its text.
-    await app.user.click(screen.getByText("C", { selector: "button" }));
+    await expectValue(app, "1");
+    await app.press("Plus", "7", "Clear entry");
+    await expectValue(app, "0");
+    expect(app.pending()).toHaveTextContent("1 +");
+  });
 
-    expect(app.input()).toHaveValue("");
-    expect(app.output()).toHaveTextContent("Result0");
+  it("shows the server's message in the display, then a digit recovers", async () => {
+    const app = renderApp();
+
+    await app.press("1", "Divide", "0", "Equals");
+
+    const value = await screen.findByText("Can’t divide by zero");
+    expect(value).toHaveStyle({ color: theme.palette.error.main });
+    await app.press("5");
+    await expectValue(app, "5");
   });
 });
 
-describe("errors", () => {
-  it("shows a field error with aria-invalid and sends no request", async () => {
+describe("physical keyboard", () => {
+  it("focuses the calculator on mount and takes digits and operators", async () => {
     const app = renderApp();
+    expect(app.calculator()).toHaveFocus();
 
-    await app.user.type(app.input(), "12 + × 4{Enter}");
+    await app.user.keyboard("12+30{Enter}");
 
-    expect(app.input()).toHaveAttribute("aria-invalid", "true");
-    expect(screen.getByText("Two operators in a row")).toBeInTheDocument();
-    expect(app.output()).toHaveTextContent("Result—");
-    expect(fetchMock).not.toHaveBeenCalled();
+    await expectValue(app, "42");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/add");
   });
 
-  it("shows the divide by zero message", async () => {
+  it.each([
+    ["8*5=", "40"],
+    ["9/3{Enter}", "3"],
+    ["2^3=", "8"],
+    ["81r", "9"],
+    ["50%", "0.5"],
+    ["7-9=", "−2"],
+    ["12{Backspace}", "1"],
+  ])("%s gives %s", async (keys, expected) => {
     const app = renderApp();
 
-    await app.user.type(app.input(), "48 ÷ 0{Enter}");
+    await app.user.keyboard(keys);
 
-    expect(screen.getByText("Can’t divide by zero")).toBeInTheDocument();
+    await expectValue(app, expected);
   });
 
-  it("shows a snackbar when the server is down, keeps the input, and retries", async () => {
+  it("Delete clears the entry and Escape clears everything", async () => {
+    const app = renderApp();
+
+    await app.user.keyboard("5+9{Delete}");
+    await expectValue(app, "0");
+    expect(app.pending()).toHaveTextContent("5 +");
+    await app.user.keyboard("{Escape}");
+
+    await expectValue(app, "0");
+    expect(app.pending()).toHaveTextContent(/^$/);
+  });
+
+  it("does not press a focused key twice on Enter", async () => {
+    const app = renderApp();
+    await app.user.keyboard("2+3");
+    screen.getByRole("button", { name: "Equals" }).focus();
+
+    await app.user.keyboard("{Enter}");
+
+    await expectValue(app, "5");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores shortcuts with Ctrl and keys it does not use", async () => {
+    const app = renderApp();
+
+    await app.user.keyboard("{Control>}5{/Control}a");
+
+    await expectValue(app, "0");
+  });
+});
+
+describe("errors and loading", () => {
+  it("shows a snackbar when the server is down, keeps the state, and retries", async () => {
     fetchMock.mockRejectedValueOnce(new TypeError("offline"));
     const app = renderApp();
 
-    await app.user.type(app.input(), "2 + 2{Enter}");
+    await app.press("2", "Plus", "2", "Equals");
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(
       "Couldn't reach the server. Your input is kept.",
     );
-    expect(app.input()).toHaveValue("2 + 2");
+    await expectValue(app, "2");
+    expect(app.pending()).toHaveTextContent("2 +");
 
     await app.user.click(within(alert).getByRole("button", { name: "Retry" }));
 
-    await waitFor(() => expect(app.output()).toHaveTextContent("Result4"));
+    await expectValue(app, "4");
     await waitFor(() =>
       expect(screen.queryByRole("alert")).not.toBeInTheDocument(),
     );
-  });
-
-  it("closes the snackbar and shows the field error when retrying an invalid edit", async () => {
-    fetchMock.mockRejectedValueOnce(new TypeError("offline"));
-    const app = renderApp();
-    await app.user.type(app.input(), "2 + 2{Enter}");
-    const alert = await screen.findByRole("alert");
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-
-    await app.user.clear(app.input());
-    await app.user.type(app.input(), "12 + × 4");
-    await app.user.click(within(alert).getByRole("button", { name: "Retry" }));
-
-    await waitFor(() =>
-      expect(screen.queryByRole("alert")).not.toBeInTheDocument(),
-    );
-    expect(screen.getByText("Two operators in a row")).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("closes the snackbar and shows the field error when an invalid edit is submitted with Enter", async () => {
-    fetchMock.mockRejectedValueOnce(new TypeError("offline"));
-    const app = renderApp();
-    await app.user.type(app.input(), "2 + 2{Enter}");
-    await screen.findByRole("alert");
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-
-    await app.user.clear(app.input());
-    await app.user.type(app.input(), "12 + × 4{Enter}");
-
-    await waitFor(() =>
-      expect(screen.queryByRole("alert")).not.toBeInTheDocument(),
-    );
-    expect(screen.getByText("Two operators in a row")).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("shows the snackbar on a 500 and can dismiss it", async () => {
@@ -204,7 +224,7 @@ describe("errors", () => {
     );
     const app = renderApp();
 
-    await app.user.type(app.input(), "1 + 1{Enter}");
+    await app.press("1", "Plus", "1", "Equals");
     const alert = await screen.findByRole("alert");
     await app.user.click(
       within(alert).getByRole("button", { name: "Dismiss" }),
@@ -213,18 +233,7 @@ describe("errors", () => {
     await waitFor(() =>
       expect(screen.queryByRole("alert")).not.toBeInTheDocument(),
     );
-    expect(app.input()).toHaveValue("1 + 1");
-  });
-});
-
-describe("keyboard and loading", () => {
-  it("clears with Escape", async () => {
-    const app = renderApp();
-    await app.user.type(app.input(), "12 + 3");
-
-    await app.user.keyboard("{Escape}");
-
-    expect(app.input()).toHaveValue("");
+    await expectValue(app, "1");
   });
 
   it("disables = and shows progress while loading", async () => {
@@ -234,7 +243,7 @@ describe("keyboard and loading", () => {
     );
     const app = renderApp();
 
-    await app.user.type(app.input(), "1 + 1{Enter}");
+    await app.press("1", "Plus", "1", "Equals");
 
     expect(screen.getByRole("button", { name: "Equals" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Equals" })).toHaveTextContent(
@@ -265,19 +274,18 @@ describe("history on desktop", () => {
     expect(historyClearButton()).toBeDisabled();
   });
 
-  it("lists a calculation, reuses it, and clears the list", async () => {
+  it("lists a calculation, reuses its result, and clears the list", async () => {
     const app = renderApp();
-    await app.user.type(app.input(), "(12 + 8) × 3{Enter}");
+    await app.press("1", "2", "Multiply", "5", "Equals");
     const item = await screen.findByRole("button", {
-      name: "Reuse (12 + 8) × 3 = 60",
+      name: "Reuse 12 × 5 = 60",
     });
 
-    await app.user.click(app.input());
-    await app.user.keyboard("{Escape}");
+    await app.press("Clear");
     await app.user.click(item);
 
-    expect(app.input()).toHaveValue("(12 + 8) × 3");
-    expect(app.input()).toHaveFocus();
+    await expectValue(app, "60");
+    expect(app.calculator()).toHaveFocus();
 
     await app.user.click(historyClearButton());
     expect(
@@ -311,7 +319,7 @@ describe("history on a 390px phone", () => {
     ).toBeInTheDocument();
   });
 
-  it("reuses an entry, closes the drawer and focuses the input", async () => {
+  it("reuses an entry, closes the drawer and focuses the calculator", async () => {
     localStorage.setItem(
       "calculator.history.v1",
       JSON.stringify([{ expr: "1 + 2", result: 3 }]),
@@ -328,7 +336,7 @@ describe("history on a 390px phone", () => {
         screen.queryByRole("region", { name: "History" }),
       ).not.toBeInTheDocument(),
     );
-    expect(app.input()).toHaveValue("1 + 2");
-    await waitFor(() => expect(app.input()).toHaveFocus());
+    await expectValue(app, "3");
+    await waitFor(() => expect(app.calculator()).toHaveFocus());
   });
 });

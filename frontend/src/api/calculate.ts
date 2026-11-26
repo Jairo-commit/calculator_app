@@ -1,6 +1,8 @@
+import type { Operation } from "../lib/calculator";
+
 export const REQUEST_TIMEOUT_MS = 10_000;
 
-/** The server rejected the expression (HTTP 400): the user can fix it. */
+/** The server rejected the operands (HTTP 400): the user can fix it. */
 export class ApiValidationError extends Error {
   override name = "ApiValidationError";
 }
@@ -14,7 +16,10 @@ export class ServerUnavailableError extends Error {
   }
 }
 
-interface CalculateOptions {
+/** The request body: unary operations send only `a`. */
+export type Operands = { a: number } | { a: number; b: number };
+
+interface CallOptions {
   signal?: AbortSignal;
   timeoutMs?: number;
 }
@@ -35,9 +40,11 @@ async function readJson(
   }
 }
 
-export async function calculateRemote(
-  expression: string,
-  { signal, timeoutMs = REQUEST_TIMEOUT_MS }: CalculateOptions = {},
+/** Runs one operation on the backend: POST /api/<op>. */
+export async function callOperation(
+  op: Operation,
+  operands: Operands,
+  { signal, timeoutMs = REQUEST_TIMEOUT_MS }: CallOptions = {},
 ): Promise<number> {
   const controller = new AbortController();
   let timedOut = false;
@@ -53,10 +60,10 @@ export async function calculateRemote(
     let response: Response;
     let body: { result?: unknown; error?: unknown } | null;
     try {
-      response = await fetch("/api/calculate", {
+      response = await fetch(`/api/${op}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ expression }),
+        body: JSON.stringify(operands),
         signal: controller.signal,
       });
       body = (await readJson(response, controller)) as typeof body;

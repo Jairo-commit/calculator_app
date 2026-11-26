@@ -1,6 +1,6 @@
 import Button from "@mui/material/Button";
 import { styled } from "@mui/material/styles";
-import type { KeyDef, KeyKind } from "../lib/calculator";
+import type { KeyDef, KeyId, KeyKind } from "../lib/calculator";
 import { keyColors } from "../theme";
 
 const StyledButton = styled(Button, {
@@ -22,9 +22,9 @@ const StyledButton = styled(Button, {
 
 interface KeypadButtonProps {
   keyDef: KeyDef;
-  /** True while a calculation is in flight; only "=" reacts to it. */
+  /** True while a calculation is in flight; only "=" is disabled by it. */
   loading: boolean;
-  onPress: (key: KeyDef) => void;
+  onPress: (id: KeyId) => void;
 }
 
 export default function KeypadButton({
@@ -43,14 +43,15 @@ export default function KeypadButton({
       disableElevation={!isEquals}
       disabled={isEquals && loading}
       aria-label={keyDef.ariaLabel}
-      onClick={() => onPress(keyDef)}
+      onClick={() => onPress(keyDef.id)}
       sx={{
-        height: { xs: 64, sm: 56 },
+        height: keyDef.rowSpan === 2 ? "auto" : { xs: 64, sm: 56 },
         minWidth: 0,
         fontSize: 20,
         fontWeight: 500,
         textTransform: "none",
         ...(keyDef.span === 2 && { gridColumn: "span 2" }),
+        ...(keyDef.rowSpan === 2 && { gridRow: "span 2" }),
       }}
     >
       {isEquals && loading ? "Calculating…" : keyDef.label}

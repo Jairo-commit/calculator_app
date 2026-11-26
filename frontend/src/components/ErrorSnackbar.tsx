@@ -11,7 +11,7 @@ interface ErrorSnackbarProps {
   onDismiss: () => void;
 }
 
-/** Server-side problems only; anything the user can fix shows on the field. */
+/** Server-side problems only; anything the user can fix shows on the display. */
 export default function ErrorSnackbar({
   open,
   onRetry,

@@ -23,18 +23,18 @@ export default function App() {
     noSsr: true,
   });
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   // The drawer restores focus to its trigger when it closes, so after a reuse
-  // the input is focused only once the drawer has finished closing.
-  const focusInputOnDrawerExit = useRef(false);
+  // the calculator is focused only once the drawer has finished closing.
+  const focusPanelOnDrawerExit = useRef(false);
 
   const handleReuse = (entry: HistoryEntry) => {
     calc.reuse(entry);
     if (isMobile) {
-      focusInputOnDrawerExit.current = true;
+      focusPanelOnDrawerExit.current = true;
       setDrawerOpen(false);
     } else {
-      inputRef.current?.focus();
+      panelRef.current?.focus();
     }
   };
 
@@ -85,15 +85,10 @@ export default function App() {
           sx={{ flex: { xs: 1, sm: "initial" } }}
         >
           <CalculatorPanel
-            expr={calc.expr}
-            onExprChange={calc.setExpr}
             onKeyPress={calc.press}
-            onCalculate={() => void calc.calculate()}
-            onClear={calc.clear}
             loading={calc.loading}
-            fieldError={calc.fieldError}
             display={calc.display}
-            inputRef={inputRef}
+            panelRef={panelRef}
           />
           {!isMobile && (
             <Paper elevation={2} sx={{ flex: "1 1 300px", minWidth: 0 }}>
@@ -118,9 +113,9 @@ export default function App() {
             },
             transition: {
               onExited: () => {
-                if (focusInputOnDrawerExit.current) {
-                  focusInputOnDrawerExit.current = false;
-                  inputRef.current?.focus();
+                if (focusPanelOnDrawerExit.current) {
+                  focusPanelOnDrawerExit.current = false;
+                  panelRef.current?.focus();
                 }
               },
             },
@@ -132,7 +127,7 @@ export default function App() {
 
       <ErrorSnackbar
         open={calc.serverErrorOpen}
-        onRetry={() => void calc.retry()}
+        onRetry={calc.retry}
         onDismiss={calc.dismissServerError}
       />
     </>

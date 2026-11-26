@@ -19,8 +19,6 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
-      # Shared engine fixture, read by the frontend tests (same path on host and container)
-      - ./backend/calc/testdata:/backend/calc/testdata:ro
     environment:
       - CHOKIDAR_USEPOLLING=true
     depends_on:

@@ -1,20 +1,13 @@
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import { MONO_FONT } from "../theme";
 import type { Display } from "../hooks/useCalculator";
+import { MONO_FONT } from "../theme";
 
-type ResultDisplayProps = Display;
-
-/** Right-aligned result/preview block, announced politely to screen readers. */
-export default function ResultDisplay({
-  label,
-  value,
-  tone,
-}: ResultDisplayProps) {
+/** Right-aligned pending line and value, announced politely to screen readers. */
+export default function ResultDisplay({ pending, value, isError }: Display) {
   return (
     <Box
       component="output"
-      htmlFor="expression"
       aria-live="polite"
       sx={{
         display: "block",
@@ -25,15 +18,16 @@ export default function ResultDisplay({
     >
       <Typography
         component="span"
+        data-testid="pending"
         sx={{
           display: "block",
-          fontSize: 12,
-          textTransform: "uppercase",
-          letterSpacing: "0.4px",
+          minHeight: 20,
+          fontFamily: MONO_FONT,
+          fontSize: 14,
           color: "text.secondary",
         }}
       >
-        {label}
+        {pending}
       </Typography>
       <Typography
         component="span"
@@ -44,11 +38,11 @@ export default function ResultDisplay({
         sx={{
           display: "block",
           fontFamily: MONO_FONT,
-          fontSize: 48,
-          lineHeight: 1.167,
-          whiteSpace: "nowrap",
+          fontSize: isError ? 24 : 48,
+          lineHeight: isError ? 2.333 : 1.167,
+          whiteSpace: isError ? "normal" : "nowrap",
           overflowX: "auto",
-          color: tone === "primary" ? "text.primary" : "text.disabled",
+          color: isError ? "error.main" : "text.primary",
         }}
       >
         {value}
