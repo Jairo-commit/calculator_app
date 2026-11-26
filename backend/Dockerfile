@@ -1,6 +1,6 @@
 FROM golang:1.27-alpine
 WORKDIR /app
-COPY go.mod go.sum ./
+COPY go.mod ./
 RUN go mod download
 COPY . .
 EXPOSE 8080
