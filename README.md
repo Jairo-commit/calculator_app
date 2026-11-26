@@ -89,7 +89,7 @@ docker compose run --rm --no-deps backend go test -count=1 ./...
 
 ## Frontend
 
-React + Vite + MUI, at http://localhost:3000. It works like an old pocket calculator:
+React + Vite + TypeScript with MUI (UI), Axios (HTTP) and TanStack Query (request state), at http://localhost:3000. It works like an old pocket calculator:
 
 1. Enter a number, press an operator (`+ − × ÷ xʸ`), then enter another number.
 2. Pressing a second operator or `=` computes the pending operation through the backend, shows the result and waits for the next number. `2 + 3 +` shows 5.

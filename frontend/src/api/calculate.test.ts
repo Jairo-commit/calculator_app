@@ -1,47 +1,51 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AxiosError } from "axios";
+import { describe, expect, it, vi } from "vitest";
 import {
+  REQUEST_TIMEOUT_MS,
   ApiValidationError,
-  ServerUnavailableError,
+  api,
   callOperation,
 } from "./calculate";
+import {
+  bodyOf,
+  networkError,
+  pathOf,
+  reply,
+  timeoutError,
+  type Adapter,
+} from "../test/fakeBackend";
 
-function respond(status: number, body: unknown): Response {
-  return new Response(typeof body === "string" ? body : JSON.stringify(body), {
-    status,
-  });
+/** Replaces the HTTP layer of the app's axios instance for one test. */
+function useAdapter(adapter: Adapter) {
+  const mock = vi.fn(adapter);
+  api.defaults.adapter = mock;
+  return mock;
 }
 
 describe("callOperation", () => {
   it("posts binary operands to /api/<op> and returns the result", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(respond(200, { result: 5 }));
-    vi.stubGlobal("fetch", fetchMock);
+    const adapter = useAdapter((c) => reply(c, 200, { result: 5 }));
 
     await expect(callOperation("add", { a: 2, b: 3 })).resolves.toBe(5);
 
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/add");
-    expect(init.method).toBe("POST");
-    expect(JSON.parse(init.body)).toEqual({ a: 2, b: 3 });
+    const config = adapter.mock.calls[0][0];
+    expect(pathOf(config)).toBe("/api/add");
+    expect(config.method).toBe("post");
+    expect(bodyOf(config)).toEqual({ a: 2, b: 3 });
   });
 
   it("posts only a for a unary operation", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(respond(200, { result: 3 }));
-    vi.stubGlobal("fetch", fetchMock);
+    const adapter = useAdapter((c) => reply(c, 200, { result: 3 }));
 
     await expect(callOperation("sqrt", { a: 9 })).resolves.toBe(3);
 
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/sqrt");
-    expect(JSON.parse(init.body)).toEqual({ a: 9 });
+    const config = adapter.mock.calls[0][0];
+    expect(pathOf(config)).toBe("/api/sqrt");
+    expect(bodyOf(config)).toEqual({ a: 9 });
   });
 
   it("maps 400 to ApiValidationError with the server message", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi
-        .fn()
-        .mockResolvedValue(respond(400, { error: "Can’t divide by zero" })),
-    );
+    useAdapter((c) => reply(c, 400, { error: "Can’t divide by zero" }));
 
     const error = await callOperation("divide", { a: 48, b: 0 }).catch(
       (e) => e,
@@ -52,12 +56,29 @@ describe("callOperation", () => {
   });
 
   it.each([
-    ["500", respond(500, { error: "Internal server error" })],
-    ["a non-JSON body", respond(200, "<html>")],
-    ["a 200 without a numeric result", respond(200, { result: "16" })],
-    ["a 400 without an error message", respond(400, {})],
-  ])("maps %s to ServerUnavailableError(server)", async (_name, response) => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
+    ["a 500", (c: Parameters<Adapter>[0]) => reply(c, 500, { error: "x" })],
+    ["a 404", (c: Parameters<Adapter>[0]) => reply(c, 404, "Not found")],
+    [
+      "a 200 with a non-JSON body",
+      (c: Parameters<Adapter>[0]) => reply(c, 200, "<html>"),
+    ],
+    [
+      "a 200 without a numeric result",
+      (c: Parameters<Adapter>[0]) => reply(c, 200, { result: "16" }),
+    ],
+    [
+      "a 400 without an error message",
+      (c: Parameters<Adapter>[0]) => reply(c, 400, {}),
+    ],
+    [
+      "an unparseable response",
+      (c: Parameters<Adapter>[0]) =>
+        Promise.reject(
+          new AxiosError("bad body", AxiosError.ERR_BAD_RESPONSE, c),
+        ),
+    ],
+  ])("maps %s to ServerUnavailableError(server)", async (_name, respond) => {
+    useAdapter(respond);
 
     await expect(callOperation("sqrt", { a: 1 })).rejects.toMatchObject({
       name: "ServerUnavailableError",
@@ -65,106 +86,53 @@ describe("callOperation", () => {
     });
   });
 
-  it("maps a rejected fetch to ServerUnavailableError(network)", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("offline")));
+  it("maps a request with no response to ServerUnavailableError(network)", async () => {
+    useAdapter(networkError);
 
     await expect(callOperation("sqrt", { a: 1 })).rejects.toMatchObject({
+      name: "ServerUnavailableError",
       kind: "network",
     });
   });
 
-  it("lets a caller abort propagate as an AbortError", async () => {
-    vi.stubGlobal("fetch", abortableFetch());
-    const caller = new AbortController();
+  it("does not hide errors that did not come from axios", async () => {
+    useAdapter(() => Promise.reject(new RangeError("bug")));
 
-    const promise = callOperation("sqrt", { a: 1 }, { signal: caller.signal });
-    caller.abort();
-
-    const error = await promise.catch((e) => e);
-    expect(error).not.toBeInstanceOf(ServerUnavailableError);
-    expect(error.name).toBe("AbortError");
-  });
-
-  it("aborts immediately when the caller signal is already aborted", async () => {
-    vi.stubGlobal("fetch", abortableFetch());
-
-    const error = await callOperation(
-      "sqrt",
-      { a: 1 },
-      {
-        signal: AbortSignal.abort(),
-      },
-    ).catch((e) => e);
-
-    expect(error.name).toBe("AbortError");
+    await expect(callOperation("sqrt", { a: 1 })).rejects.toBeInstanceOf(
+      RangeError,
+    );
   });
 });
 
 describe("callOperation timeout", () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
-  afterEach(() => {
-    vi.useRealTimers();
+  it("asks axios to give up after 10 seconds", async () => {
+    const adapter = useAdapter((c) => reply(c, 200, { result: 1 }));
+
+    await callOperation("sqrt", { a: 1 });
+
+    expect(adapter.mock.calls[0][0].timeout).toBe(10_000);
+    expect(REQUEST_TIMEOUT_MS).toBe(10_000);
   });
 
-  it("gives up after 10 seconds with a timeout error", async () => {
-    vi.stubGlobal("fetch", abortableFetch());
+  it.each([AxiosError.ECONNABORTED, AxiosError.ETIMEDOUT])(
+    "maps %s to ServerUnavailableError(timeout)",
+    async (code) => {
+      useAdapter((c) =>
+        Promise.reject(new AxiosError("timeout of 10000ms exceeded", code, c)),
+      );
 
-    const promise = callOperation("sqrt", { a: 1 });
-    const assertion = expect(promise).rejects.toMatchObject({
+      await expect(callOperation("sqrt", { a: 1 })).rejects.toMatchObject({
+        name: "ServerUnavailableError",
+        kind: "timeout",
+      });
+    },
+  );
+
+  it("maps the error axios raises when the timeout passes", async () => {
+    useAdapter(timeoutError);
+
+    await expect(callOperation("sqrt", { a: 1 })).rejects.toMatchObject({
       kind: "timeout",
     });
-    await vi.advanceTimersByTimeAsync(9_999);
-    await vi.advanceTimersByTimeAsync(1);
-
-    await assertion;
-  });
-
-  it("maps a timeout while the body is being read to a timeout error", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn((_url: string, init: RequestInit) => {
-        const body = new ReadableStream({
-          start(controller) {
-            init.signal?.addEventListener("abort", () =>
-              controller.error(new DOMException("aborted", "AbortError")),
-            );
-          },
-        });
-        return Promise.resolve(new Response(body, { status: 200 }));
-      }),
-    );
-
-    const promise = callOperation("sqrt", { a: 1 });
-    const assertion = expect(promise).rejects.toMatchObject({
-      name: "ServerUnavailableError",
-      kind: "timeout",
-    });
-    await vi.advanceTimersByTimeAsync(10_000);
-
-    await assertion;
-  });
-
-  it("does not time out a request that finished in time", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(respond(200, { result: 1 })),
-    );
-
-    await expect(callOperation("sqrt", { a: 1 })).resolves.toBe(1);
-    expect(vi.getTimerCount()).toBe(0);
   });
 });
-
-/** A fetch that never answers but rejects with AbortError when aborted. */
-function abortableFetch() {
-  return vi.fn(
-    (_url: string, init: RequestInit) =>
-      new Promise<Response>((_resolve, reject) => {
-        const abort = () => reject(new DOMException("aborted", "AbortError"));
-        if (init.signal?.aborted) abort();
-        init.signal?.addEventListener("abort", abort);
-      }),
-  );
-}

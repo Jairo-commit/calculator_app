@@ -1,6 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterEach, vi } from "vitest";
+import { api } from "../api/calculate";
 
 /** Viewport width the matchMedia stub reports; tests change it with setViewportWidth. */
 let viewportWidth = 1280;
@@ -17,6 +18,9 @@ function matches(query: string): boolean {
   if (max && viewportWidth > Number(max[1])) return false;
   return true;
 }
+
+/** The adapter a test replaces to fake the backend; restored after each test. */
+const realAdapter = api.defaults.adapter;
 
 window.matchMedia = (query: string): MediaQueryList =>
   ({
@@ -36,4 +40,5 @@ afterEach(() => {
   localStorage.clear();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  api.defaults.adapter = realAdapter;
 });

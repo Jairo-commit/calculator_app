@@ -3,18 +3,27 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
-import { fakeBackend, json } from "./test/fakeBackend";
+import { api } from "./api/calculate";
+import {
+  fakeBackend,
+  networkError,
+  pathOf,
+  reply,
+  type Adapter,
+} from "./test/fakeBackend";
+import { createQueryWrapper } from "./test/queryWrapper";
 import { setViewportWidth } from "./test/setup";
 import { theme } from "./theme";
 
-let fetchMock: ReturnType<typeof vi.fn>;
+/** The faked HTTP layer: every request of a test goes through it. */
+let backend: ReturnType<typeof vi.fn<Adapter>>;
 
 beforeEach(() => {
-  fetchMock = vi.fn(async (url: string, init: RequestInit) =>
-    fakeBackend(url, init),
-  );
-  vi.stubGlobal("fetch", fetchMock);
+  backend = vi.fn<Adapter>(fakeBackend);
+  api.defaults.adapter = backend;
 });
+
+const pathOfCall = (call: number) => pathOf(backend.mock.calls[call][0]);
 
 const historyClearButton = () =>
   within(screen.getByRole("region", { name: "History" })).getByRole("button", {
@@ -23,10 +32,13 @@ const historyClearButton = () =>
 
 function renderApp() {
   const user = userEvent.setup();
+  const QueryWrapper = createQueryWrapper();
   render(
-    <ThemeProvider theme={theme}>
-      <App />
-    </ThemeProvider>,
+    <QueryWrapper>
+      <ThemeProvider theme={theme}>
+        <App />
+      </ThemeProvider>
+    </QueryWrapper>,
   );
   return {
     user,
@@ -92,8 +104,8 @@ describe("keypad", () => {
     await app.press("2", "Plus", "Minus", "3", "Equals");
 
     await expectValue(app, "−1");
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0][0]).toBe("/api/subtract");
+    expect(backend).toHaveBeenCalledTimes(1);
+    expect(pathOfCall(0)).toBe("/api/subtract");
   });
 
   it("calculates 9 √ and 80 × 15 % =", async () => {
@@ -145,7 +157,7 @@ describe("physical keyboard", () => {
     await app.user.keyboard("12+30{Enter}");
 
     await expectValue(app, "42");
-    expect(fetchMock.mock.calls[0][0]).toBe("/api/add");
+    expect(pathOfCall(0)).toBe("/api/add");
   });
 
   it.each([
@@ -184,7 +196,7 @@ describe("physical keyboard", () => {
     await app.user.keyboard("{Enter}");
 
     await expectValue(app, "5");
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(backend).toHaveBeenCalledTimes(1);
   });
 
   it("ignores shortcuts with Ctrl and keys it does not use", async () => {
@@ -198,7 +210,7 @@ describe("physical keyboard", () => {
 
 describe("errors and loading", () => {
   it("shows a snackbar when the server is down, keeps the state, and retries", async () => {
-    fetchMock.mockRejectedValueOnce(new TypeError("offline"));
+    backend.mockImplementationOnce(networkError);
     const app = renderApp();
 
     await app.press("2", "Plus", "2", "Equals");
@@ -219,8 +231,8 @@ describe("errors and loading", () => {
   });
 
   it("shows the snackbar on a 500 and can dismiss it", async () => {
-    fetchMock.mockResolvedValueOnce(
-      json(500, { error: "Internal server error" }),
+    backend.mockImplementationOnce((c) =>
+      reply(c, 500, { error: "Internal server error" }),
     );
     const app = renderApp();
 
@@ -237,9 +249,12 @@ describe("errors and loading", () => {
   });
 
   it("disables = and shows progress while loading", async () => {
-    let finish: (r: Response) => void = () => {};
-    fetchMock.mockReturnValueOnce(
-      new Promise<Response>((resolve) => (finish = resolve)),
+    let finish: () => void = () => {};
+    backend.mockImplementationOnce(
+      (c) =>
+        new Promise((resolve) => {
+          finish = () => resolve(reply(c, 200, { result: 2 }));
+        }),
     );
     const app = renderApp();
 
@@ -253,7 +268,7 @@ describe("errors and loading", () => {
       screen.getByRole("progressbar", { name: "Calculating" }),
     ).toBeInTheDocument();
 
-    finish(json(200, { result: 2 }));
+    finish();
 
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Equals" })).toBeEnabled(),

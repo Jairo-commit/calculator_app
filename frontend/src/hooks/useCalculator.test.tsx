@@ -2,7 +2,16 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { KeyId } from "../lib/calculator";
 import { HISTORY_KEY } from "../lib/history";
-import { fakeBackend, json } from "../test/fakeBackend";
+import { api } from "../api/calculate";
+import {
+  bodyOf,
+  fakeBackend,
+  networkError,
+  pathOf,
+  reply,
+  type Adapter,
+} from "../test/fakeBackend";
+import { createQueryWrapper } from "../test/queryWrapper";
 import {
   MAX_DIGITS,
   initialState,
@@ -12,13 +21,12 @@ import {
   type CalculatorState,
 } from "./useCalculator";
 
-let fetchMock: ReturnType<typeof vi.fn>;
+/** The faked HTTP layer: every request of a test goes through it. */
+let backend: ReturnType<typeof vi.fn<Adapter>>;
 
 beforeEach(() => {
-  fetchMock = vi.fn(async (url: string, init: RequestInit) =>
-    fakeBackend(url, init),
-  );
-  vi.stubGlobal("fetch", fetchMock);
+  backend = vi.fn<Adapter>(fakeBackend);
+  api.defaults.adapter = backend;
 });
 
 type Hook = { current: ReturnType<typeof useCalculator> };
@@ -37,11 +45,12 @@ const digits = (text: string): KeyId[] =>
   [...text].map((c) => (c === "." ? "decimal" : (c as KeyId)));
 
 function setup() {
-  return renderHook(() => useCalculator()).result;
+  return renderHook(() => useCalculator(), { wrapper: createQueryWrapper() })
+    .result;
 }
 
-const bodyOf = (call: number) =>
-  JSON.parse((fetchMock.mock.calls[call][1] as RequestInit).body as string);
+const bodyOfCall = (call: number) => bodyOf(backend.mock.calls[call][0]);
+const pathOfCall = (call: number) => pathOf(backend.mock.calls[call][0]);
 
 describe("typing a number", () => {
   it("starts at 0 and replaces it with the first digit", () => {
@@ -95,9 +104,9 @@ describe("binary operations", () => {
 
     await press(result, "2", "add", "3", "equals");
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0][0]).toBe("/api/add");
-    expect(bodyOf(0)).toEqual({ a: 2, b: 3 });
+    expect(backend).toHaveBeenCalledTimes(1);
+    expect(pathOfCall(0)).toBe("/api/add");
+    expect(bodyOfCall(0)).toEqual({ a: 2, b: 3 });
     expect(result.current.display).toEqual({
       pending: "2 + 3 =",
       value: "5",
@@ -110,7 +119,7 @@ describe("binary operations", () => {
 
     await press(result, "2", "add", "3", "multiply");
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(backend).toHaveBeenCalledTimes(1);
     expect(result.current.display.value).toBe("5");
     expect(result.current.display.pending).toBe("5 ×");
   });
@@ -129,7 +138,7 @@ describe("binary operations", () => {
       pending: "5 +",
       value: "8",
     });
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(backend).not.toHaveBeenCalled();
   });
 
   it("2 + × only swaps the pending operation, with no request", async () => {
@@ -137,10 +146,10 @@ describe("binary operations", () => {
 
     await press(result, "2", "add", "multiply");
 
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(backend).not.toHaveBeenCalled();
     expect(result.current.display.pending).toBe("2 ×");
     await press(result, "4", "equals");
-    expect(fetchMock.mock.calls[0][0]).toBe("/api/multiply");
+    expect(pathOfCall(0)).toBe("/api/multiply");
     expect(result.current.display.value).toBe("8");
   });
 
@@ -149,7 +158,7 @@ describe("binary operations", () => {
 
     await press(result, "equals", "2", "equals", "add", "equals");
 
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(backend).not.toHaveBeenCalled();
     expect(result.current.display).toMatchObject({
       pending: "2 +",
       value: "2",
@@ -172,7 +181,7 @@ describe("binary operations", () => {
 
     await press(result, "2", "power", "1", "0", "equals");
 
-    expect(fetchMock.mock.calls[0][0]).toBe("/api/power");
+    expect(pathOfCall(0)).toBe("/api/power");
     expect(result.current.display.value).toBe("1,024");
   });
 });
@@ -183,8 +192,8 @@ describe("unary operations", () => {
 
     await press(result, "9", "sqrt");
 
-    expect(fetchMock.mock.calls[0][0]).toBe("/api/sqrt");
-    expect(bodyOf(0)).toEqual({ a: 9 });
+    expect(pathOfCall(0)).toBe("/api/sqrt");
+    expect(bodyOfCall(0)).toEqual({ a: 9 });
     expect(result.current.display.value).toBe("3");
   });
 
@@ -196,7 +205,7 @@ describe("unary operations", () => {
     await press(result, "equals");
 
     expect(result.current.display.value).toBe("12");
-    expect(bodyOf(1)).toEqual({ a: 80, b: 0.15 });
+    expect(bodyOfCall(1)).toEqual({ a: 80, b: 0.15 });
   });
 
   it("2 + 9 √ = gives 5", async () => {
@@ -248,7 +257,7 @@ describe("errors from the server", () => {
 
     await press(result, "add", "equals", "sqrt", "backspace", "percent");
     expect(result.current.display.isError).toBe(true);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(backend).toHaveBeenCalledTimes(1);
 
     await press(result, "4");
     expect(result.current.display).toEqual({
@@ -278,13 +287,13 @@ describe("errors from the server", () => {
     await press(result, "1", "divide", "0", "equals", "5", "equals");
 
     expect(result.current.display).toMatchObject({ pending: "", value: "5" });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(backend).toHaveBeenCalledTimes(1);
   });
 });
 
 describe("server unavailable", () => {
   it("opens the snackbar, keeps the state, and Retry applies the result", async () => {
-    fetchMock.mockRejectedValueOnce(new TypeError("offline"));
+    backend.mockImplementationOnce(networkError);
     const result = setup();
 
     await press(result, "2", "add", "3", "equals");
@@ -299,14 +308,14 @@ describe("server unavailable", () => {
     await waitFor(() => expect(result.current.display.value).toBe("5"));
 
     expect(result.current.serverErrorOpen).toBe(false);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(bodyOf(1)).toEqual({ a: 2, b: 3 });
+    expect(backend).toHaveBeenCalledTimes(2);
+    expect(bodyOfCall(1)).toEqual({ a: 2, b: 3 });
     expect(result.current.display.pending).toBe("2 + 3 =");
   });
 
   it("treats a 500 like a network failure and can dismiss the snackbar", async () => {
-    fetchMock.mockResolvedValueOnce(
-      json(500, { error: "Internal server error" }),
+    backend.mockImplementationOnce((c) =>
+      reply(c, 500, { error: "Internal server error" }),
     );
     const result = setup();
 
@@ -323,15 +332,18 @@ describe("server unavailable", () => {
 
     act(() => result.current.retry());
 
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(backend).not.toHaveBeenCalled();
   });
 });
 
 describe("loading", () => {
   it("ignores every key except C while a request is in flight", async () => {
-    let finish: (r: Response) => void = () => {};
-    fetchMock.mockReturnValueOnce(
-      new Promise<Response>((resolve) => (finish = resolve)),
+    let finish: () => void = () => {};
+    backend.mockImplementationOnce(
+      (c) =>
+        new Promise((resolve) => {
+          finish = () => resolve(reply(c, 200, { result: 5 }));
+        }),
     );
     const result = setup();
     await press(result, "2", "add", "3");
@@ -345,22 +357,19 @@ describe("loading", () => {
       result.current.press("backspace");
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(backend).toHaveBeenCalledTimes(1);
     expect(result.current.display.value).toBe("3");
 
-    await act(async () => finish(json(200, { result: 5 })));
+    await act(async () => finish());
     await waitFor(() => expect(result.current.display.value).toBe("5"));
   });
 
   it("C abandons the request in flight and the late answer is ignored", async () => {
-    let finish: (r: Response) => void = () => {};
-    fetchMock.mockImplementationOnce(
-      (_url: string, init: RequestInit) =>
-        new Promise<Response>((resolve, reject) => {
-          finish = resolve;
-          init.signal?.addEventListener("abort", () =>
-            reject(new DOMException("aborted", "AbortError")),
-          );
+    let finish: () => void = () => {};
+    backend.mockImplementationOnce(
+      (c) =>
+        new Promise((resolve) => {
+          finish = () => resolve(reply(c, 200, { result: 5 }));
         }),
     );
     const result = setup();
@@ -369,7 +378,7 @@ describe("loading", () => {
     await waitFor(() => expect(result.current.loading).toBe(true));
 
     await act(async () => result.current.press("clear"));
-    await act(async () => finish(json(200, { result: 5 })));
+    await act(async () => finish());
 
     expect(result.current.loading).toBe(false);
     expect(result.current.display).toMatchObject({ pending: "", value: "0" });

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { useCallback, useEffect, useReducer, useState } from "react";
 import {
   ApiValidationError,
   ServerUnavailableError,
@@ -56,21 +57,13 @@ export interface CalculatorState {
   error: string | null;
   /** The finished equation shown after "=", e.g. "2 + 3 =". */
   finished: string | null;
-  loading: boolean;
-  serverErrorOpen: boolean;
-  /** The request that failed on the server side, for Retry. */
-  lastRequest: CalcRequest | null;
   history: HistoryEntry[];
 }
 
 export type Action =
   | { type: "KEY"; id: KeyId }
-  | { type: "REQUEST_START" }
-  | { type: "REQUEST_END" }
   | { type: "REQUEST_SUCCEEDED"; request: CalcRequest; result: number }
   | { type: "REQUEST_REJECTED"; message: string }
-  | { type: "REQUEST_FAILED"; request: CalcRequest }
-  | { type: "DISMISS_SERVER_ERROR" }
   | { type: "REUSE"; entry: HistoryEntry }
   | { type: "CLEAR_HISTORY" };
 
@@ -93,9 +86,6 @@ const INITIAL_NUMBER = {
 export function initialState(): CalculatorState {
   return {
     ...INITIAL_NUMBER,
-    loading: false,
-    serverErrorOpen: false,
-    lastRequest: null,
     history: loadHistory(),
   };
 }
@@ -145,15 +135,8 @@ function pressOperator(state: CalculatorState, op: BinaryOp): CalculatorState {
 
 function pressKey(state: CalculatorState, id: KeyId): CalculatorState {
   if (id === "clear") {
-    return {
-      ...state,
-      ...INITIAL_NUMBER,
-      loading: false,
-      serverErrorOpen: false,
-      lastRequest: null,
-    };
+    return { ...state, ...INITIAL_NUMBER };
   }
-  if (state.loading) return state;
 
   if (id === "clearEntry") {
     return {
@@ -185,7 +168,7 @@ export function requestForKey(
   state: CalculatorState,
   id: KeyId,
 ): CalcRequest | null {
-  if (state.loading || state.error !== null) return null;
+  if (state.error !== null) return null;
   const current = Number(state.display);
   if (isUnaryOp(id)) return { kind: "unary", op: id, a: current };
 
@@ -232,8 +215,6 @@ function applyResult(
     entry: "result" as const,
     error: null,
     finished: null,
-    lastRequest: null,
-    serverErrorOpen: false,
     history: addEntry(state.history, historyEntryFor(request, result)),
   };
   if (request.kind === "unary") return { ...shown, operandReady: true };
@@ -261,10 +242,6 @@ export function reducer(
   switch (action.type) {
     case "KEY":
       return pressKey(state, action.id);
-    case "REQUEST_START":
-      return { ...state, loading: true, serverErrorOpen: false };
-    case "REQUEST_END":
-      return { ...state, loading: false };
     case "REQUEST_SUCCEEDED":
       return applyResult(state, action.request, action.result);
     case "REQUEST_REJECTED":
@@ -275,15 +252,8 @@ export function reducer(
         entry: "result",
         operandReady: false,
         finished: null,
-        lastRequest: null,
-        serverErrorOpen: false,
       };
-    case "REQUEST_FAILED":
-      return { ...state, serverErrorOpen: true, lastRequest: action.request };
-    case "DISMISS_SERVER_ERROR":
-      return { ...state, serverErrorOpen: false };
     case "REUSE":
-      if (state.loading) return state;
       return {
         ...state,
         display: String(action.entry.result),
@@ -312,79 +282,71 @@ export function displayOf(state: CalculatorState): Display {
   return { pending, value, isError: false };
 }
 
-const isAbort = (e: unknown): boolean =>
-  e instanceof DOMException && e.name === "AbortError";
+/** Runs a request on the backend; the result is applied by the caller. */
+const sendRequest = (request: CalcRequest): Promise<number> =>
+  callOperation(request.op, operandsOf(request));
 
 export function useCalculator() {
   const [state, dispatch] = useReducer(reducer, undefined, initialState);
-  const loadingRef = useRef(false);
-  const controllerRef = useRef<AbortController | null>(null);
+  const [serverErrorOpen, setServerErrorOpen] = useState(false);
+  const { mutate, reset, isPending, variables } = useMutation({
+    mutationFn: sendRequest,
+  });
 
   useEffect(() => saveHistory(state.history), [state.history]);
-  useEffect(() => () => controllerRef.current?.abort(), []);
 
-  const send = useCallback(async (request: CalcRequest) => {
-    if (loadingRef.current) return;
-    loadingRef.current = true;
-    dispatch({ type: "REQUEST_START" });
-    const controller = new AbortController();
-    controllerRef.current = controller;
-    try {
-      const result = await callOperation(request.op, operandsOf(request), {
-        signal: controller.signal,
+  // The callbacks belong to this call, not to the mutation: React Query drops
+  // them when the mutation is reset, so an answer that arrives after C is lost.
+  const send = useCallback(
+    (request: CalcRequest) => {
+      setServerErrorOpen(false);
+      mutate(request, {
+        onSuccess: (result) =>
+          dispatch({ type: "REQUEST_SUCCEEDED", request, result }),
+        onError: (error) => {
+          if (error instanceof ApiValidationError) {
+            dispatch({ type: "REQUEST_REJECTED", message: error.message });
+          } else if (error instanceof ServerUnavailableError) {
+            setServerErrorOpen(true);
+          }
+        },
       });
-      if (!controller.signal.aborted) {
-        dispatch({ type: "REQUEST_SUCCEEDED", request, result });
-      }
-    } catch (e) {
-      if (e instanceof ApiValidationError) {
-        dispatch({ type: "REQUEST_REJECTED", message: e.message });
-      } else if (e instanceof ServerUnavailableError) {
-        dispatch({ type: "REQUEST_FAILED", request });
-      } else if (!isAbort(e)) {
-        throw e;
-      }
-    } finally {
-      // After C the request is abandoned and a newer one may be in flight.
-      if (controllerRef.current === controller) {
-        controllerRef.current = null;
-        loadingRef.current = false;
-        dispatch({ type: "REQUEST_END" });
-      }
-    }
-  }, []);
+    },
+    [mutate],
+  );
 
   const press = useCallback(
     (id: KeyId) => {
       if (id === "clear") {
-        controllerRef.current?.abort();
-        controllerRef.current = null;
-        loadingRef.current = false;
+        // Abandon the request in flight, if any: its answer is discarded.
+        reset();
+        setServerErrorOpen(false);
+      } else if (isPending) {
+        return;
       }
       const request = requestForKey(state, id);
-      if (request) void send(request);
+      if (request) send(request);
       else dispatch({ type: "KEY", id });
     },
-    [state, send],
+    [state, isPending, reset, send],
   );
 
   const retry = useCallback(() => {
-    dispatch({ type: "DISMISS_SERVER_ERROR" });
-    if (state.lastRequest) void send(state.lastRequest);
-  }, [state.lastRequest, send]);
+    setServerErrorOpen(false);
+    if (serverErrorOpen && variables) send(variables);
+  }, [serverErrorOpen, variables, send]);
 
   const reuse = useCallback(
-    (entry: HistoryEntry) => dispatch({ type: "REUSE", entry }),
-    [],
+    (entry: HistoryEntry) => {
+      if (!isPending) dispatch({ type: "REUSE", entry });
+    },
+    [isPending],
   );
   const clearHistory = useCallback(
     () => dispatch({ type: "CLEAR_HISTORY" }),
     [],
   );
-  const dismissServerError = useCallback(
-    () => dispatch({ type: "DISMISS_SERVER_ERROR" }),
-    [],
-  );
+  const dismissServerError = useCallback(() => setServerErrorOpen(false), []);
 
   return {
     press,
@@ -392,9 +354,9 @@ export function useCalculator() {
     reuse,
     clearHistory,
     dismissServerError,
-    loading: state.loading,
+    loading: isPending,
     display: displayOf(state),
     history: state.history,
-    serverErrorOpen: state.serverErrorOpen,
+    serverErrorOpen,
   };
 }

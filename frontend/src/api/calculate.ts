@@ -1,3 +1,4 @@
+import axios, { AxiosError } from "axios";
 import type { Operation } from "../lib/calculator";
 
 export const REQUEST_TIMEOUT_MS = 10_000;
@@ -19,67 +20,48 @@ export class ServerUnavailableError extends Error {
 /** The request body: unary operations send only `a`. */
 export type Operands = { a: number } | { a: number; b: number };
 
-interface CallOptions {
-  signal?: AbortSignal;
-  timeoutMs?: number;
+/** The one HTTP client of the app; the Vite proxy sends /api to the backend. */
+export const api = axios.create({
+  baseURL: "/api",
+  timeout: REQUEST_TIMEOUT_MS,
+});
+
+const TIMEOUT_CODES = new Set<string | undefined>([
+  AxiosError.ECONNABORTED,
+  AxiosError.ETIMEDOUT,
+]);
+
+function errorMessageOf(data: unknown): string | null {
+  const error = (data as { error?: unknown } | null)?.error;
+  return typeof error === "string" ? error : null;
 }
 
-/**
- * Reads the JSON body of a response, or null when it is not JSON. An abort
- * while reading is not a bad body, so it is rethrown for the caller to map.
- */
-async function readJson(
-  response: Response,
-  controller: AbortController,
-): Promise<unknown> {
-  try {
-    return await response.json();
-  } catch (e) {
-    if (controller.signal.aborted) throw e;
-    return null;
+/** Turns an axios failure into the two errors the calculator understands. */
+function mapError(e: AxiosError): Error {
+  if (TIMEOUT_CODES.has(e.code)) return new ServerUnavailableError("timeout");
+  if (!e.response) {
+    return new ServerUnavailableError(
+      e.code === "ERR_BAD_RESPONSE" ? "server" : "network",
+    );
   }
+  const message = errorMessageOf(e.response.data);
+  if (e.response.status === 400 && message !== null) {
+    return new ApiValidationError(message);
+  }
+  return new ServerUnavailableError("server");
 }
 
 /** Runs one operation on the backend: POST /api/<op>. */
 export async function callOperation(
   op: Operation,
   operands: Operands,
-  { signal, timeoutMs = REQUEST_TIMEOUT_MS }: CallOptions = {},
 ): Promise<number> {
-  const controller = new AbortController();
-  let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, timeoutMs);
-  const abortFromCaller = () => controller.abort();
-  if (signal?.aborted) controller.abort();
-  signal?.addEventListener("abort", abortFromCaller);
-
   try {
-    let response: Response;
-    let body: { result?: unknown; error?: unknown } | null;
-    try {
-      response = await fetch(`/api/${op}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(operands),
-        signal: controller.signal,
-      });
-      body = (await readJson(response, controller)) as typeof body;
-    } catch (e) {
-      // A caller abort is not a server problem: let it propagate untouched.
-      if (signal?.aborted) throw e;
-      throw new ServerUnavailableError(timedOut ? "timeout" : "network");
-    }
-
-    if (response.ok && typeof body?.result === "number") return body.result;
-    if (response.status === 400 && typeof body?.error === "string") {
-      throw new ApiValidationError(body.error);
-    }
-    throw new ServerUnavailableError("server");
-  } finally {
-    clearTimeout(timer);
-    signal?.removeEventListener("abort", abortFromCaller);
+    const { data } = await api.post<{ result?: unknown }>(`/${op}`, operands);
+    if (typeof data?.result === "number") return data.result;
+  } catch (e) {
+    if (axios.isAxiosError(e)) throw mapError(e);
+    throw e;
   }
+  throw new ServerUnavailableError("server");
 }
