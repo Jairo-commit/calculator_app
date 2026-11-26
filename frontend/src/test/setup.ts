@@ -4,7 +4,6 @@ import { afterEach, vi } from "vitest";
 import { api } from "../api/calculate";
 
 let width = 1280;
-/** Sets the viewport width the matchMedia stub reports. */
 export const setViewportWidth = (pixels: number) => {
   width = pixels;
 };

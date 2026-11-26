@@ -1,4 +1,3 @@
-/** The calculator's state machine: pure functions, no React and no HTTP. */
 import {
   OPERATION_SYMBOLS,
   formatResult,
@@ -11,31 +10,21 @@ import { HISTORY_LIMIT, loadHistory, type HistoryEntry } from "./history";
 
 const MAX_DIGITS = 15;
 
-/** One backend call, and the key that asked for it. */
 export interface Request {
   operation: Operation;
   firstOperand: number;
-  /** Absent for √ and %. */
   secondOperand?: number;
-  /** The history text, e.g. "2 + 3" or "√9". */
   label: string;
-  /** An operator chains from the result, "equals" finishes, √ and % stay put. */
   next: KeyId;
 }
 
 export interface State {
-  /** What the display shows: typed as typed, a result already formatted. */
   text: string;
   value: number;
-  /** True when the next digit starts a new number. */
   fresh: boolean;
-  /** The operator waiting for its second operand, and the first one. */
   pending: { operation: BinaryOperation; value: number; text: string } | null;
-  /** True once an operand is on screen since the operator was pressed. */
   ready: boolean;
-  /** A 400 message; replaces the display until a digit, C or CE. */
   error: string | null;
-  /** The finished equation after "=", e.g. "2 + 3 =". */
   done: string | null;
   history: HistoryEntry[];
 }
@@ -95,8 +84,6 @@ function press(state: State, id: KeyId): State {
     const text = state.text.slice(0, -1) || "0";
     return state.fresh ? state : { ...state, text, value: Number(text) };
   }
-  // "=", √ and % only ever send a request (see requestFor), and so does an
-  // operator with an operand ready; the rest is local.
   if (!isBinaryOperation(id)) return state;
   if (state.pending)
     return { ...state, pending: { ...state.pending, operation: id } };
@@ -109,7 +96,6 @@ function press(state: State, id: KeyId): State {
   };
 }
 
-/** The backend call a key needs, or null when it only changes local state. */
 export function requestFor(state: State, id: KeyId): Request | null {
   if (state.error !== null) return null;
   if (id === "sqrt") {
@@ -207,7 +193,6 @@ export function reducer(state: State, action: Action): State {
 }
 
 export interface Display {
-  /** The small line above the value, e.g. "5 +"; empty when there is none. */
   pending: string;
   value: string;
   isError: boolean;

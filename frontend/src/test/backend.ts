@@ -25,7 +25,6 @@ const OPERATIONS: Record<
   percent: (firstOperand) => firstOperand / 100,
 };
 
-/** What the Go backend answers for an operation. */
 export function evaluate(
   operation: Operation,
   firstOperand: number,
@@ -36,7 +35,6 @@ export function evaluate(
     : { result: OPERATIONS[operation](firstOperand, secondOperand) };
 }
 
-/** Settles like axios: a response for 2xx, an AxiosError carrying it otherwise. */
 export function reply(
   config: Config,
   status: number,
@@ -56,7 +54,6 @@ export function reply(
       );
 }
 
-/** An axios failure that has no response: ERR_NETWORK or ECONNABORTED (timeout). */
 export const fail =
   (code: string): Adapter =>
   (config) =>
@@ -77,7 +74,6 @@ export const fakeBackend: Adapter = (config) => {
   return reply(config, "error" in answer ? 400 : 200, answer);
 };
 
-/** Routes the app's axios instance to a fake; setup restores it after the test. */
 export function stubBackend(adapter: Adapter = fakeBackend) {
   const mock = vi.fn(adapter);
   api.defaults.adapter = mock;

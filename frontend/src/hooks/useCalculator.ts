@@ -22,7 +22,6 @@ export function useCalculator() {
 
   useEffect(() => saveHistory(state.history), [state.history]);
 
-  // The callbacks live on this call, so reset() (key C) drops a late answer.
   const send = (request: Request) =>
     mutate(request, {
       onSuccess: (result) => dispatch({ type: "succeeded", request, result }),
@@ -53,7 +52,6 @@ export function useCalculator() {
     clearHistory: () => dispatch({ type: "clearHistory" }),
     snackbarOpen,
     dismiss: () => setSnackbarOpen(false),
-    /** Re-sends the request that failed. */
     retry: () => {
       setSnackbarOpen(false);
       if (variables) send(variables);

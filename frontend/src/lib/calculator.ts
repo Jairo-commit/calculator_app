@@ -1,8 +1,6 @@
-/** Calculator vocabulary: operations, keypad, physical keys and number formatting. No math here. */
 export type BinaryOperation =
   "add" | "subtract" | "multiply" | "divide" | "power";
 export type UnaryOperation = "sqrt" | "percent";
-/** An operation is also its endpoint name: POST /api/<operation>. */
 export type Operation = BinaryOperation | UnaryOperation;
 export type KeyId =
   | "0"
@@ -37,7 +35,6 @@ const numberFormat = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 10,
 });
 
-/** For backend results: en-US grouping, up to 10 decimals, a true minus sign. */
 export const formatResult = (value: number): string =>
   numberFormat.format(value).replace(/^-/, "−");
 
@@ -60,7 +57,6 @@ const key = (
 ): KeyDef => ({ id, label, kind, aria, ...extra });
 const digit = (digitId: KeyId) => key(digitId, digitId, "num");
 
-/** The keys in grid order (4 columns); "=" spans two rows and "0" two columns. */
 export const KEYPAD: readonly KeyDef[] = [
   key("clear", "C", "clear", "Clear"),
   key("clearEntry", "CE", "util", "Clear entry"),
@@ -103,7 +99,6 @@ const PHYSICAL_KEYS: Record<string, KeyId> = {
   Escape: "clear",
 };
 
-/** The keypad key a physical key stands for, or null. */
 export const keyIdFor = (physical: string): KeyId | null =>
   /^\d$/.test(physical)
     ? (physical as KeyId)

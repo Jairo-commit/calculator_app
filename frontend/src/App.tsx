@@ -26,8 +26,6 @@ export default function App() {
   const panelRef = useRef<HTMLDivElement>(null);
   const focusPanel = () => panelRef.current?.focus();
 
-  // Focus the calculator on mount and when a request ends: the "=" key that
-  // was clicked is disabled while loading, so focus would be lost.
   useEffect(() => {
     if (!calculator.loading) panelRef.current?.focus();
   }, [calculator.loading]);
@@ -98,7 +96,6 @@ export default function App() {
           anchor="bottom"
           open={drawerOpen}
           onClose={() => setDrawerOpen(false)}
-          // The drawer would return focus to its button; the calculator wins.
           disableRestoreFocus
           slotProps={{ transition: { onExited: focusPanel } }}
         >

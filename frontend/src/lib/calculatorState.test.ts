@@ -9,10 +9,6 @@ import {
   type State,
 } from "./calculatorState";
 
-/**
- * Presses physical keys ("12 + 30 =") through the reducer, answering every
- * request like the backend does. A token that is not a key is typed digit by digit.
- */
 function run(keys: string, from: State = initialState()): State {
   let state = from;
   for (const token of keys.split(" ")) {

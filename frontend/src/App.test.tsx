@@ -29,7 +29,6 @@ function renderApp() {
     panel,
     value: () => screen.getByTestId("value"),
     pending: () => screen.getByTestId("pending"),
-    /** Clicks keypad keys by accessible name. */
     click: async (...names: string[]) => {
       for (const name of names) {
         await user.click(within(panel).getByRole("button", { name }));
@@ -38,13 +37,11 @@ function renderApp() {
   };
 }
 
-/** A backend that fails the first request with `adapter`, then works. */
 const failingOnce = (adapter: Adapter): Adapter => {
   let calls = 0;
   return (config) => (calls++ === 0 ? adapter(config) : fakeBackend(config));
 };
 
-/** A backend that holds every request until `answer()` is called. */
 function heldBackend() {
   let answer!: () => void;
   const adapter = stubBackend(
@@ -54,7 +51,6 @@ function heldBackend() {
   return { adapter, answer: () => answer() };
 }
 
-/** The display shows exactly `text` (toHaveTextContent alone matches substrings). */
 const shows = (element: HTMLElement, text: string) =>
   expect(element).toHaveTextContent(new RegExp(`^${text}$`));
 

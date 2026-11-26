@@ -12,7 +12,6 @@ interface CalculatorPanelProps {
   onPress: (id: KeyId) => void;
   loading: boolean;
   display: Display;
-  /** The focusable panel; it receives the physical keyboard. */
   panelRef: RefObject<HTMLDivElement | null>;
 }
 
@@ -26,7 +25,6 @@ export default function CalculatorPanel({
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     const id = keyIdFor(event.key);
     if (id === null) return;
-    // Needed in real browsers to stop Enter clicking the focused key too; jsdom cannot prove it.
     event.preventDefault();
     onPress(id);
   };

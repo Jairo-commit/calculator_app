@@ -10,7 +10,6 @@ import { MONO_FONT } from "../theme";
 
 interface HistoryPanelProps {
   history: readonly HistoryEntry[];
-  /** True while a calculation is in flight: entries can't be loaded then. */
   disabled: boolean;
   onReuse: (result: number) => void;
   onClear: () => void;
@@ -55,7 +54,6 @@ export default function HistoryPanel({
         <List disablePadding>
           {history.map(({ expr, result }, index) => (
             <ListItemButton
-              // The same expression can be calculated twice.
               key={`${index}-${expr}`}
               disabled={disabled}
               aria-label={`Reuse ${expr} = ${formatResult(result)}`}

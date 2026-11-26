@@ -6,7 +6,6 @@ export interface HistoryEntry {
 export const HISTORY_LIMIT = 8;
 export const HISTORY_KEY = "calculator.history.v1";
 
-/** Reads saved history; unreadable storage yields []. */
 export function loadHistory(): HistoryEntry[] {
   try {
     const saved: HistoryEntry[] = JSON.parse(
@@ -23,11 +22,10 @@ export function loadHistory(): HistoryEntry[] {
   }
 }
 
-/** Best-effort: history still works for the session if storage is unavailable. */
 export function saveHistory(entries: readonly HistoryEntry[]): void {
   try {
     localStorage.setItem(HISTORY_KEY, JSON.stringify(entries));
   } catch {
-    // ignored
+    return;
   }
 }
