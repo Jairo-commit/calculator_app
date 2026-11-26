@@ -88,9 +88,9 @@ function press(s: State, id: KeyId): State {
   if (id === "clearEntry") {
     return { ...s, ...BLANK, pending: s.pending };
   }
-  if (id === "decimal") return typeChar(s, ".");
   if (/^\d$/.test(id)) return typeChar(s, id);
   if (s.error !== null) return s;
+  if (id === "decimal") return typeChar(s, ".");
   if (id === "backspace") {
     const text = s.text.slice(0, -1) || "0";
     return s.fresh ? s : { ...s, text, value: Number(text) };

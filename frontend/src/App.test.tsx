@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AxiosError } from "axios";
 import { describe, expect, it } from "vitest";
@@ -53,6 +53,10 @@ function heldBackend() {
   return { adapter, answer: () => answer() };
 }
 
+/** The display shows exactly `text` (toHaveTextContent alone matches substrings). */
+const shows = (el: HTMLElement, text: string) =>
+  expect(el).toHaveTextContent(new RegExp(`^${text}$`));
+
 const snackbar = () => screen.queryByText(/Couldn't reach the server/);
 
 describe("keypad and keyboard", () => {
@@ -65,7 +69,7 @@ describe("keypad and keyboard", () => {
     await app.click("Equals");
     answer();
 
-    await waitFor(() => expect(app.value()).toHaveTextContent("5"));
+    await waitFor(() => shows(app.value(), "5"));
     expect(app.pending()).toHaveTextContent("2 + 3 =");
     expect(backend).toHaveBeenCalledTimes(1);
     expect(backend.mock.calls[0][0].url).toBe("/add");
@@ -78,21 +82,29 @@ describe("keypad and keyboard", () => {
     const app = renderApp();
 
     await app.user.keyboard("12+30{Enter}");
-    await waitFor(() => expect(app.value()).toHaveTextContent("42"));
-    await app.user.keyboard("{Control>}7{/Control}{Escape}");
+    await waitFor(() => shows(app.value(), "42"));
+    await app.user.keyboard("{Control>}7{/Control}");
+    shows(app.value(), "42");
+    await app.user.keyboard("{Escape}");
 
-    expect(app.value()).toHaveTextContent("0");
+    shows(app.value(), "0");
   });
 
-  it("treats Enter as = even when a key button has focus", async () => {
+  it("treats Enter as = even when a key button has focus, and sends a grouped result as a number", async () => {
     const backend = stubBackend();
     const app = renderApp();
 
-    await app.click("2", "Plus", "3");
+    await app.click("9", "9", "9", "Plus", "1");
+    await app.user.keyboard("{Enter}");
+    await waitFor(() => shows(app.value(), "1,000"));
+    await app.click("Plus", "1");
     await app.user.keyboard("{Enter}");
 
-    await waitFor(() => expect(app.value()).toHaveTextContent("5"));
-    expect(backend).toHaveBeenCalledTimes(1);
+    await waitFor(() => shows(app.value(), "1,001"));
+    expect(backend.mock.calls.map(([c]) => bodyOf(c))).toEqual([
+      { a: 999, b: 1 },
+      { a: 1000, b: 1 },
+    ]);
   });
 });
 
@@ -102,11 +114,11 @@ describe("errors", () => {
     const app = renderApp();
 
     await app.click("1", "Divide", "0", "Equals");
-    await waitFor(() => expect(app.value()).toHaveTextContent(DIVIDE_BY_ZERO));
+    await waitFor(() => shows(app.value(), DIVIDE_BY_ZERO));
     expect(snackbar()).toBeNull();
     await app.click("5");
 
-    expect(app.value()).toHaveTextContent("5");
+    shows(app.value(), "5");
   });
 
   it("keeps state on a network failure and Retry re-sends the same operands", async () => {
@@ -115,11 +127,11 @@ describe("errors", () => {
 
     await app.click("2", "Plus", "3", "Equals");
     await screen.findByText(/Couldn't reach the server/);
-    expect(app.value()).toHaveTextContent("3");
+    shows(app.value(), "3");
     expect(app.pending()).toHaveTextContent("2 +");
     await app.user.click(screen.getByRole("button", { name: "Retry" }));
 
-    await waitFor(() => expect(app.value()).toHaveTextContent("5"));
+    await waitFor(() => shows(app.value(), "5"));
     expect(backend.mock.calls.map(([c]) => bodyOf(c))).toEqual([
       { a: 2, b: 3 },
       { a: 2, b: 3 },
@@ -129,6 +141,10 @@ describe("errors", () => {
   });
 
   it("opens the snackbar for a timeout or 5xx; a key or Dismiss closes it", async () => {
+    localStorage.setItem(
+      HISTORY_KEY,
+      JSON.stringify([{ expr: "2 + 3", result: 5 }]),
+    );
     stubBackend(failingOnce((c) => reply(c, 500, {})));
     const app = renderApp();
 
@@ -138,6 +154,11 @@ describe("errors", () => {
     await waitFor(() => expect(snackbar()).toBeNull());
 
     stubBackend(fail(AxiosError.ECONNABORTED));
+    await app.click("Equals");
+    await screen.findByText(/Couldn't reach the server/);
+    await app.user.click(screen.getByRole("button", { name: /Reuse 2 \+ 3/ }));
+    await waitFor(() => expect(snackbar()).toBeNull());
+
     await app.click("Equals");
     await screen.findByText(/Couldn't reach the server/);
     await app.user.click(screen.getByRole("button", { name: "Dismiss" }));
@@ -151,13 +172,14 @@ describe("errors", () => {
 
     await app.click("2", "Plus", "3", "Equals");
     await app.click("9");
-    expect(app.value()).toHaveTextContent("3");
+    shows(app.value(), "3");
     expect(screen.getByRole("button", { name: "Equals" })).toBeDisabled();
     await app.click("Clear");
     answer();
+    await act(() => new Promise((r) => setTimeout(r)));
 
     expect(backend).toHaveBeenCalledTimes(1);
-    expect(app.value()).toHaveTextContent("0");
+    shows(app.value(), "0");
     expect(localStorage.getItem(HISTORY_KEY)).toBe("[]");
   });
 });
@@ -180,7 +202,7 @@ describe("history", () => {
       screen.queryByText("No calculations yet", { exact: false }),
     ).not.toBeNull();
     answer();
-    await waitFor(() => expect(app.value()).toHaveTextContent("5"));
+    await waitFor(() => shows(app.value(), "5"));
     expect(JSON.parse(localStorage.getItem(HISTORY_KEY)!)).toEqual([
       { expr: "2 + 3", result: 5 },
     ]);
@@ -198,7 +220,7 @@ describe("history", () => {
     );
 
     await app.user.click(historyButton(/Reuse 2 \+ 3/));
-    expect(app.value()).toHaveTextContent("5");
+    shows(app.value(), "5");
     expect(app.panel).toHaveFocus();
     await app.user.click(historyButton("Clear"));
     expect(screen.queryByRole("button", { name: /Reuse/ })).toBeNull();
@@ -220,7 +242,7 @@ describe("history", () => {
     );
 
     await waitFor(() => expect(screen.queryByText("History")).toBeNull());
-    expect(app.value()).toHaveTextContent("5");
+    shows(app.value(), "5");
     await waitFor(() => expect(app.panel).toHaveFocus());
   });
 });

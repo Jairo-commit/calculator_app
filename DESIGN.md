@@ -64,7 +64,7 @@ Page background is in `theme.ts`; key colours are in `Keypad.tsx`.
 
 ## 4. Physical keyboard
 
-There is no text field. The calculator `Paper` has `tabIndex={0}`, is focused on mount, after a request ends, and after Retry, Dismiss, history Clear or a history entry is used and handles `onKeyDown` itself, not a global listener.
+There is no text field. The calculator `Paper` has `tabIndex={0}`, is focused on mount, after a request ends, and after Retry, Dismiss, history Clear or a history entry is used. It handles `onKeyDown` itself, not a global listener.
 
 | Key | Action |
 |---|---|
@@ -87,7 +87,7 @@ There is no text field. The calculator `Paper` has `tabIndex={0}`, is focused on
 Right-aligned block, `aria-live="polite"`, rendered as `<output>`.
 
 - **Pending line** (small, Roboto Mono 14px, secondary text, always reserves its height): `5 +` while an operator is pending, `2 + 3 =` after equals, empty otherwise.
-- **Value**: Roboto Mono 48px / line-height 1.167, wrapping with `overflowWrap: anywhere`. A typed number is shown exactly as typed; a result is formatted with `formatResult()` (`en-US` grouping, up to 10 decimals, true minus sign).
+- **Value**: Roboto Mono 48px, wrapping with `overflowWrap: anywhere`. A typed number is shown exactly as typed; a result is formatted with `formatResult()` (`en-US` grouping, up to 10 decimals, true minus sign).
 - **Error**: the server's message replaces the value, in the error colour (`#d32f2f`), 24px, wrapping.
 
 ---
@@ -195,7 +195,7 @@ A missing operand answers 400 "Enter a number"; a malformed body, an unknown fie
 | Square root | `9 √` = 3 |
 | Percent | `15 %` = 0.15; `80 × 15 % =` = 12 |
 
-Results are rounded to at most 10 decimal places and 15 significant digits, half away from zero, to remove float noise (`0.1 + 0.2` = `0.3`); `−0` becomes `0`.
+Results are rounded to at most 10 decimal places, half away from zero, to remove float noise (`0.1 + 0.2` = `0.3`); `−0` becomes `0`.
 
 ### Error messages (exact copy)
 
@@ -233,7 +233,7 @@ src/
 - Every key is a `<Button>` with an `aria-label` for symbols (√, xʸ, ⌫, ÷ …).
 - The calculator is a focusable `role="group"` labelled "Calculator"; the display is `aria-live="polite"`.
 - LinearProgress has `aria-label="Calculating"`.
-- Touch targets ≥ 44px (keys are 56/64px). Visible focus ring on all controls.
+- Touch targets ≥ 44px (keys are 56/64px). The calculator panel has an explicit focus ring; MUI controls use their default focus styling.
 - Colour contrast: all key text/background pairs above pass WCAG AA.
 
 ## 12. Acceptance checks

@@ -30,6 +30,10 @@ describe("callOperation", () => {
     ["a network failure", fail(AxiosError.ERR_NETWORK)],
     ["a timeout", fail(AxiosError.ECONNABORTED)],
     ["a 500", (c: Parameters<typeof reply>[0]) => reply(c, 500, {})],
+    [
+      "a 400 without an error message",
+      (c: Parameters<typeof reply>[0]) => reply(c, 400, "<html>Bad</html>"),
+    ],
   ])("lets %s through as a non-validation error", async (_name, adapter) => {
     stubBackend(adapter);
 

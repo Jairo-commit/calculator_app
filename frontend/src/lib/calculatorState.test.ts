@@ -84,7 +84,7 @@ describe("calculator state", () => {
       value: "Can’t divide by zero",
       isError: true,
     });
-    expect(run("+ = r Backspace", failed).error).not.toBeNull();
+    expect(run("+ = r . Backspace", failed).error).not.toBeNull();
     expect(displayOf(run("5", failed))).toMatchObject({
       value: "5",
       isError: false,

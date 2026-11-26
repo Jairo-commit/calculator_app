@@ -45,8 +45,14 @@ export function useCalculator() {
     loading: isPending,
     display: displayOf(state),
     history: state.history,
-    reuse: (result: number) => dispatch({ type: "reuse", result }),
-    clearHistory: () => dispatch({ type: "clearHistory" }),
+    reuse: (result: number) => {
+      setSnackbarOpen(false);
+      dispatch({ type: "reuse", result });
+    },
+    clearHistory: () => {
+      setSnackbarOpen(false);
+      dispatch({ type: "clearHistory" });
+    },
     snackbarOpen,
     dismiss: () => setSnackbarOpen(false),
     /** Re-sends the request that failed. */
