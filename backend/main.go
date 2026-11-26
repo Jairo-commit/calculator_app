@@ -11,7 +11,7 @@ import (
 func main() {
 	server := &http.Server{
 		Addr:              ":8080",
-		Handler:           newHandler(calc.Binary, calc.Unary),
+		Handler:           newHandler(calc.BinaryOperations, calc.UnaryOperations),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,

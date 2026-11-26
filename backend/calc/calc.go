@@ -10,7 +10,7 @@ import (
 // Error is a problem the user can fix; any other error is an internal fault.
 type Error struct{ Message string }
 
-func (e *Error) Error() string { return e.Message }
+func (calcError *Error) Error() string { return calcError.Message }
 
 var (
 	errDivZero      = &Error{"Can’t divide by zero"}
@@ -22,56 +22,62 @@ var (
 
 // finish rejects non-finite results, rounds away float noise (0.1+0.2 -> 0.3)
 // and turns -0 into 0.
-func finish(x float64) (float64, error) {
+func finish(value float64) (float64, error) {
 	switch {
-	case math.IsNaN(x):
+	case math.IsNaN(value):
 		return 0, errNotReal
-	case math.IsInf(x, 0):
+	case math.IsInf(value, 0):
 		return 0, errTooLarge
 	}
-	// Round via the decimal text: x*1e10 loses precision above ~1e9. The parse
+	// Round via the decimal text: value*1e10 loses precision above ~1e9. The parse
 	// cannot fail: 'f' output of a finite float is always a valid number.
-	x, _ = strconv.ParseFloat(strconv.FormatFloat(x, 'f', 10, 64), 64)
-	if x == 0 {
+	value, _ = strconv.ParseFloat(strconv.FormatFloat(value, 'f', 10, 64), 64)
+	if value == 0 {
 		return 0, nil
 	}
-	return x, nil
+	return value, nil
 }
 
-func Add(a, b float64) (float64, error)      { return finish(a + b) }
-func Subtract(a, b float64) (float64, error) { return finish(a - b) }
-func Multiply(a, b float64) (float64, error) { return finish(a * b) }
+func Add(firstOperand, secondOperand float64) (float64, error) {
+	return finish(firstOperand + secondOperand)
+}
+func Subtract(firstOperand, secondOperand float64) (float64, error) {
+	return finish(firstOperand - secondOperand)
+}
+func Multiply(firstOperand, secondOperand float64) (float64, error) {
+	return finish(firstOperand * secondOperand)
+}
 
-func Divide(a, b float64) (float64, error) {
-	if b == 0 {
+func Divide(dividend, divisor float64) (float64, error) {
+	if divisor == 0 {
 		return 0, errDivZero
 	}
-	return finish(a / b)
+	return finish(dividend / divisor)
 }
 
-func Power(a, b float64) (float64, error) {
-	if a == 0 && b < 0 {
+func Power(base, exponent float64) (float64, error) {
+	if base == 0 && exponent < 0 {
 		return 0, errZeroNegPower
 	}
-	return finish(math.Pow(a, b))
+	return finish(math.Pow(base, exponent))
 }
 
-func Sqrt(a float64) (float64, error) {
-	if a < 0 {
+func Sqrt(value float64) (float64, error) {
+	if value < 0 {
 		return 0, errSqrtNegative
 	}
-	return finish(math.Sqrt(a))
+	return finish(math.Sqrt(value))
 }
 
-func Percent(a float64) (float64, error) { return finish(a / 100) }
+func Percent(value float64) (float64, error) { return finish(value / 100) }
 
-// Binary and Unary are the operations by endpoint name (POST /api/<name>).
+// BinaryOperations and UnaryOperations are the operations by endpoint name (POST /api/<name>).
 var (
-	Binary = map[string]func(a, b float64) (float64, error){
+	BinaryOperations = map[string]func(firstOperand, secondOperand float64) (float64, error){
 		"add": Add, "subtract": Subtract, "multiply": Multiply,
 		"divide": Divide, "power": Power,
 	}
-	Unary = map[string]func(a float64) (float64, error){
+	UnaryOperations = map[string]func(value float64) (float64, error){
 		"sqrt": Sqrt, "percent": Percent,
 	}
 )

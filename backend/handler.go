@@ -10,64 +10,64 @@ import (
 )
 
 type (
-	binaryOp = func(a, b float64) (float64, error)
-	unaryOp  = func(a float64) (float64, error)
+	binaryOperation = func(firstOperand, secondOperand float64) (float64, error)
+	unaryOperation  = func(firstOperand float64) (float64, error)
 )
 
 // operands is the request body; nil means the operand was missing or null.
 type operands struct {
-	A *float64 `json:"a"`
-	B *float64 `json:"b"`
+	FirstOperand  *float64 `json:"a"`
+	SecondOperand *float64 `json:"b"`
 }
 
-func writeJSON(w http.ResponseWriter, status int, body any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(body)
+func writeJSON(writer http.ResponseWriter, status int, body any) {
+	writer.Header().Set("Content-Type", "application/json")
+	writer.WriteHeader(status)
+	_ = json.NewEncoder(writer).Encode(body)
 }
 
 // newHandler serves POST /api/<name> for each operation and GET /api/health.
-func newHandler(binary map[string]binaryOp, unary map[string]unaryOp) http.Handler {
+func newHandler(binaryOperations map[string]binaryOperation, unaryOperations map[string]unaryOperation) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	mux.HandleFunc("GET /api/health", func(writer http.ResponseWriter, _ *http.Request) {
+		writeJSON(writer, http.StatusOK, map[string]string{"status": "ok"})
 	})
-	for name, op := range binary {
-		mux.HandleFunc("POST /api/"+name, serve(true, op))
+	for name, operation := range binaryOperations {
+		mux.HandleFunc("POST /api/"+name, serve(true, operation))
 	}
-	for name, op := range unary {
-		mux.HandleFunc("POST /api/"+name, serve(false, func(a, _ float64) (float64, error) { return op(a) }))
+	for name, operation := range unaryOperations {
+		mux.HandleFunc("POST /api/"+name, serve(false, func(firstOperand, _ float64) (float64, error) { return operation(firstOperand) }))
 	}
 	return mux
 }
 
-// serve decodes the operands (b only when needsB), runs op and writes the result.
-func serve(needsB bool, op binaryOp) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		var in operands
-		dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10))
-		dec.DisallowUnknownFields()
-		if err := dec.Decode(&in); err != nil || dec.Decode(&struct{}{}) != io.EOF {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+// serve decodes the operands (second operand only when needsSecondOperand), runs operation and writes the result.
+func serve(needsSecondOperand bool, operation binaryOperation) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		var requestBody operands
+		decoder := json.NewDecoder(http.MaxBytesReader(writer, request.Body, 1<<10))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&requestBody); err != nil || decoder.Decode(&struct{}{}) != io.EOF {
+			writeJSON(writer, http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
 			return
 		}
-		if in.A == nil || (needsB && in.B == nil) {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Enter a number"})
+		if requestBody.FirstOperand == nil || (needsSecondOperand && requestBody.SecondOperand == nil) {
+			writeJSON(writer, http.StatusBadRequest, map[string]string{"error": "Enter a number"})
 			return
 		}
-		var b float64
-		if needsB {
-			b = *in.B
+		var secondOperand float64
+		if needsSecondOperand {
+			secondOperand = *requestBody.SecondOperand
 		}
-		result, err := op(*in.A, b)
+		result, err := operation(*requestBody.FirstOperand, secondOperand)
 		var calcErr *calc.Error
 		switch {
 		case errors.As(err, &calcErr):
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": calcErr.Message})
+			writeJSON(writer, http.StatusBadRequest, map[string]string{"error": calcErr.Message})
 		case err != nil:
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
+			writeJSON(writer, http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
 		default:
-			writeJSON(w, http.StatusOK, map[string]float64{"result": result})
+			writeJSON(writer, http.StatusOK, map[string]float64{"result": result})
 		}
 	}
 }
