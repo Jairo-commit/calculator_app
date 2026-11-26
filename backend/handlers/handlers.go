@@ -1,4 +1,3 @@
-// Package handlers holds one HTTP handler per calculator endpoint.
 package handlers
 
 import (
@@ -9,8 +8,6 @@ import (
 
 	"calculator_app/backend/calc"
 )
-
-// Two-number operations: the body is {"a": 6, "b": 3}.
 
 func Add(writer http.ResponseWriter, request *http.Request) {
 	handleTwoOperands(writer, request, calc.Add)
@@ -32,8 +29,6 @@ func Power(writer http.ResponseWriter, request *http.Request) {
 	handleTwoOperands(writer, request, calc.Power)
 }
 
-// One-number operations: the body is {"a": 9}.
-
 func Sqrt(writer http.ResponseWriter, request *http.Request) {
 	handleOneOperand(writer, request, calc.Sqrt)
 }
@@ -42,7 +37,6 @@ func Percent(writer http.ResponseWriter, request *http.Request) {
 	handleOneOperand(writer, request, calc.Percent)
 }
 
-// operands is the request body; nil means the operand was missing or null.
 type operands struct {
 	FirstOperand  *float64 `json:"a"`
 	SecondOperand *float64 `json:"b"`
@@ -70,8 +64,6 @@ func handleOneOperand(writer http.ResponseWriter, request *http.Request, operati
 	writeResult(writer, result, err)
 }
 
-// readOperands decodes the body (at most 1 KiB, no unknown fields, nothing
-// after the object). On failure it writes the 400 itself and returns false.
 func readOperands(writer http.ResponseWriter, request *http.Request) (operands, bool) {
 	var requestBody operands
 	decoder := json.NewDecoder(http.MaxBytesReader(writer, request.Body, 1<<10))
@@ -87,7 +79,6 @@ func readOperands(writer http.ResponseWriter, request *http.Request) (operands, 
 	return requestBody, true
 }
 
-// writeResult sends the result, a 400 for a calc.Error the user can fix, or a 500.
 func writeResult(writer http.ResponseWriter, result float64, err error) {
 	var calcError *calc.Error
 	switch {
