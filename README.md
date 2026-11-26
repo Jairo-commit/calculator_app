@@ -31,31 +31,31 @@ Every operation has its own endpoint, and the backend does all the math. It is p
 
 | Method | Path | Body | Description |
 |---|---|---|---|
-| POST | `/api/add` | `{"a": 2, "b": 3}` | a + b |
-| POST | `/api/subtract` | `{"a": 2, "b": 3}` | a − b |
-| POST | `/api/multiply` | `{"a": 2, "b": 3}` | a × b |
-| POST | `/api/divide` | `{"a": 6, "b": 3}` | a ÷ b |
-| POST | `/api/power` | `{"a": 2, "b": 10}` | a to the power b |
-| POST | `/api/sqrt` | `{"a": 9}` | square root of a |
-| POST | `/api/percent` | `{"a": 15}` | a ÷ 100 |
+| POST | `/api/add` | `{"firstOperand": 2, "secondOperand": 3}` | firstOperand + secondOperand |
+| POST | `/api/subtract` | `{"firstOperand": 2, "secondOperand": 3}` | firstOperand − secondOperand |
+| POST | `/api/multiply` | `{"firstOperand": 2, "secondOperand": 3}` | firstOperand × secondOperand |
+| POST | `/api/divide` | `{"firstOperand": 6, "secondOperand": 3}` | firstOperand ÷ secondOperand |
+| POST | `/api/power` | `{"firstOperand": 2, "secondOperand": 10}` | firstOperand to the power secondOperand |
+| POST | `/api/sqrt` | `{"firstOperand": 9}` | square root of firstOperand |
+| POST | `/api/percent` | `{"firstOperand": 15}` | firstOperand ÷ 100 |
 
 A success is `200 {"result": 5}`. Results are rounded to at most 10 decimal places, and `-0` becomes `0`.
 
 ```bash
 curl -s -X POST localhost:8080/api/add -H 'Content-Type: application/json' \
-  --data '{"a":2,"b":3}'
+  --data '{"firstOperand":2,"secondOperand":3}'
 # 200 {"result":5}
 
 curl -s -X POST localhost:8080/api/divide -H 'Content-Type: application/json' \
-  --data '{"a":1,"b":0}'
+  --data '{"firstOperand":1,"secondOperand":0}'
 # 400 {"error":"Can’t divide by zero"}
 
 curl -s -X POST localhost:8080/api/sqrt -H 'Content-Type: application/json' \
-  --data '{"a":9}'
+  --data '{"firstOperand":9}'
 # 200 {"result":3}
 
 curl -s -X POST localhost:8080/api/percent -H 'Content-Type: application/json' \
-  --data '{"a":15}'
+  --data '{"firstOperand":15}'
 # 200 {"result":0.15}
 ```
 
@@ -65,9 +65,9 @@ Anything the user can fix returns `400 {"error": "..."}`:
 
 | Message | When |
 |---|---|
-| Can’t divide by zero | `divide` with `b` = 0 |
-| Can’t take the square root of a negative number | `sqrt` with `a` < 0 |
-| Can’t raise 0 to a negative power | `power` with `a` = 0 and `b` < 0 |
+| Can’t divide by zero | `divide` with `secondOperand` = 0 |
+| Can’t take the square root of a negative number | `sqrt` with `firstOperand` < 0 |
+| Can’t raise 0 to a negative power | `power` with `firstOperand` = 0 and `secondOperand` < 0 |
 | Result isn’t a real number | for example `power` of a negative base to a fractional power |
 | Result is too large to display | the result overflows |
 | Enter a number | an operand is missing or `null` |
