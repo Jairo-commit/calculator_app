@@ -1,6 +1,6 @@
 # Calculator App
 
-Simple full-stack practice project: **React (Vite + TypeScript)** frontend and **Go (net/http)** backend, both running in Docker. Nothing needs to be installed locally except Docker.
+An old-style pocket calculator with one backend endpoint per operation. Full-stack practice project: **React (Vite + TypeScript)** frontend and **Go (net/http)** backend, both running in Docker. Nothing needs to be installed locally except Docker.
 
 ## Run
 
@@ -25,3 +25,68 @@ docker compose down                    # stop everything
 ```
 
 After adding npm packages, rebuild so the image picks them up: `docker compose up -d --build frontend`.
+
+## Backend API
+
+Every operation has its own endpoint, and the backend does all the math. It is built on Go's `net/http` with [Huma](https://huma.rocks) (v2, `humago` adapter), so the API documents itself: the OpenAPI 3.1 spec is generated from the Go structs.
+
+- Interactive docs (Swagger UI): http://localhost:8080/api/docs, or through the frontend proxy at http://localhost:3000/api/docs
+- OpenAPI spec: `/api/openapi.json` (also `/api/openapi.yaml`)
+
+| Method | Path | Body | Description |
+|---|---|---|---|
+| GET | `/api/health` | none | `{"status":"ok"}` |
+| POST | `/api/add` | `{"a": 2, "b": 3}` | a + b |
+| POST | `/api/subtract` | `{"a": 2, "b": 3}` | a − b |
+| POST | `/api/multiply` | `{"a": 2, "b": 3}` | a × b |
+| POST | `/api/divide` | `{"a": 6, "b": 3}` | a ÷ b |
+| POST | `/api/power` | `{"a": 2, "b": 10}` | a to the power b |
+| POST | `/api/sqrt` | `{"a": 9}` | square root of a |
+| POST | `/api/percent` | `{"a": 15}` | a ÷ 100 |
+
+A success is `200 {"result": 5}`. Results are rounded to at most 10 decimal places and 15 significant digits, and `-0` becomes `0`.
+
+```bash
+curl -s -X POST localhost:8080/api/add -H 'Content-Type: application/json' \
+  --data '{"a":2,"b":3}'
+# 200 {"result":5}
+
+curl -s -X POST localhost:8080/api/divide -H 'Content-Type: application/json' \
+  --data '{"a":1,"b":0}'
+# 400 {"error":"Can’t divide by zero"}
+
+curl -s -X POST localhost:8080/api/sqrt -H 'Content-Type: application/json' \
+  --data '{"a":9}'
+# 200 {"result":3}
+
+curl -s -X POST localhost:8080/api/percent -H 'Content-Type: application/json' \
+  --data '{"a":15}'
+# 200 {"result":0.15}
+```
+
+### Errors
+
+Anything the user can fix returns `400 {"error": "..."}`:
+
+| Message | When |
+|---|---|
+| Can’t divide by zero | `divide` with `b` = 0 |
+| Can’t take the square root of a negative number | `sqrt` with `a` < 0 |
+| Can’t raise 0 to a negative power | `power` with `a` = 0 and `b` < 0 |
+| Result isn’t a real number | for example `power` of a negative base to a fractional power |
+| Result is too large to display | the result overflows |
+| Enter a number | an operand is missing or `null` |
+| Invalid request body | malformed JSON, an unknown field, a non-number operand, or a body over 1 KiB |
+
+An unknown path is `404`, a wrong method is `405`, and any other failure returns `500 {"error": "Internal server error"}`. Each request writes one structured log line with its status, duration and operation name (`op`); the operands are never logged.
+
+## Backend tests
+
+Everything runs in Docker, so nothing needs to be installed locally.
+
+```bash
+docker compose run --rm --no-deps backend gofmt -l .      # must print nothing
+docker compose run --rm --no-deps backend go vet ./...
+docker compose run --rm --no-deps backend go test -count=1 ./...
+```
+
