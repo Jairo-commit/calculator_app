@@ -28,10 +28,7 @@ After adding npm packages, rebuild so the image picks them up: `docker compose u
 
 ## Backend API
 
-Every operation has its own endpoint, and the backend does all the math. It is built on Go's `net/http` with [Huma](https://huma.rocks) (v2, `humago` adapter), so the API documents itself: the OpenAPI 3.1 spec is generated from the Go structs.
-
-- Interactive docs (Swagger UI): http://localhost:8080/api/docs, or through the frontend proxy at http://localhost:3000/api/docs
-- OpenAPI spec: `/api/openapi.json` (also `/api/openapi.yaml`)
+Every operation has its own endpoint, and the backend does all the math. It is plain Go `net/http` with no dependencies.
 
 | Method | Path | Body | Description |
 |---|---|---|---|
@@ -44,7 +41,7 @@ Every operation has its own endpoint, and the backend does all the math. It is b
 | POST | `/api/sqrt` | `{"a": 9}` | square root of a |
 | POST | `/api/percent` | `{"a": 15}` | a ÷ 100 |
 
-A success is `200 {"result": 5}`. Results are rounded to at most 10 decimal places and 15 significant digits, and `-0` becomes `0`.
+A success is `200 {"result": 5}`. Results are rounded to at most 10 decimal places (values of 1e15 or more are left as they are), and `-0` becomes `0`.
 
 ```bash
 curl -s -X POST localhost:8080/api/add -H 'Content-Type: application/json' \
@@ -76,9 +73,9 @@ Anything the user can fix returns `400 {"error": "..."}`:
 | Result isn’t a real number | for example `power` of a negative base to a fractional power |
 | Result is too large to display | the result overflows |
 | Enter a number | an operand is missing or `null` |
-| Invalid request body | malformed JSON, an unknown field, a non-number operand, or a body over 1 KiB |
+| Invalid request body | malformed JSON, an empty body, an unknown field, or a body over 1 KiB |
 
-An unknown path is `404`, a wrong method is `405`, and any other failure returns `500 {"error": "Internal server error"}`. Each request writes one structured log line with its status, duration and operation name (`op`); the operands are never logged.
+An unknown path is `404`, a wrong method is `405`, and any other failure returns `500 {"error": "Internal server error"}`.
 
 ## Backend tests
 

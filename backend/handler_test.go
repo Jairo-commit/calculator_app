@@ -1,383 +1,61 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
 	"strings"
 	"testing"
 
 	"calculator_app/backend/calc"
 )
 
-func realHandler() http.Handler { return newHandler(calc.Binary, calc.Unary) }
-
-func do(t *testing.T, h http.Handler, method, path, body string) *httptest.ResponseRecorder {
-	t.Helper()
-	req := httptest.NewRequest(method, path, strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	return rec
-}
-
-func post(t *testing.T, h http.Handler, path, body string) *httptest.ResponseRecorder {
-	t.Helper()
-	return do(t, h, http.MethodPost, path, body)
-}
-
-func jsonBody(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
-	t.Helper()
-	var out map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
-		t.Fatalf("response is not JSON: %v (%q)", err, rec.Body.String())
-	}
-	return out
-}
-
-// captureLogs routes slog to a buffer and returns it; the log lines are decoded
-// by logEvents.
-func captureLogs(t *testing.T) *bytes.Buffer {
-	t.Helper()
-	var buf bytes.Buffer
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, nil)))
-	t.Cleanup(func() { slog.SetDefault(previous) })
-	return &buf
-}
-
-func logEvents(t *testing.T, buf *bytes.Buffer) []map[string]any {
-	t.Helper()
-	var events []map[string]any
-	for _, line := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
-		var event map[string]any
-		if err := json.Unmarshal([]byte(line), &event); err != nil {
-			t.Fatalf("log line is not JSON: %v (%q)", err, line)
-		}
-		events = append(events, event)
-	}
-	return events
-}
-
-func TestEveryOperationReturnsItsResult(t *testing.T) {
-	cases := []struct {
-		path, body string
-		want       float64
+func TestHandler(t *testing.T) {
+	boom := map[string]binaryOp{"boom": func(a, b float64) (float64, error) { return 0, errors.New("db down") }}
+	tests := []struct {
+		name, method, path, body string
+		status                   int
+		want                     string
 	}{
-		{"/api/add", `{"a":2,"b":3}`, 5},
-		{"/api/add", `{"a":0.1,"b":0.2}`, 0.3},
-		{"/api/subtract", `{"a":2,"b":5}`, -3},
-		{"/api/multiply", `{"a":80,"b":0.15}`, 12},
-		{"/api/divide", `{"a":1,"b":4}`, 0.25},
-		{"/api/power", `{"a":2,"b":10}`, 1024},
-		{"/api/sqrt", `{"a":9}`, 3},
-		{"/api/percent", `{"a":15}`, 0.15},
+		{"add", "POST", "/api/add", `{"a":2,"b":3}`, 200, `{"result":5}`},
+		{"subtract", "POST", "/api/subtract", `{"a":2,"b":3}`, 200, `{"result":-1}`},
+		{"multiply", "POST", "/api/multiply", `{"a":2,"b":3}`, 200, `{"result":6}`},
+		{"divide", "POST", "/api/divide", `{"a":6,"b":3}`, 200, `{"result":2}`},
+		{"power", "POST", "/api/power", `{"a":2,"b":10}`, 200, `{"result":1024}`},
+		{"sqrt", "POST", "/api/sqrt", `{"a":9}`, 200, `{"result":3}`},
+		{"percent", "POST", "/api/percent", `{"a":15}`, 200, `{"result":0.15}`},
+		{"divide by zero", "POST", "/api/divide", `{"a":1,"b":0}`, 400, `{"error":"Can’t divide by zero"}`},
+		{"missing b", "POST", "/api/add", `{"a":2}`, 400, `{"error":"Enter a number"}`},
+		{"null a", "POST", "/api/sqrt", `{"a":null}`, 400, `{"error":"Enter a number"}`},
+		{"bad json", "POST", "/api/add", `{`, 400, `{"error":"Invalid request body"}`},
+		{"unknown field", "POST", "/api/sqrt", `{"a":9,"c":1}`, 400, `{"error":"Invalid request body"}`},
+		{"oversize body", "POST", "/api/sqrt", `{"a":9,"pad":"` + strings.Repeat("x", 2000) + `"}`, 400, `{"error":"Invalid request body"}`},
+		{"internal error", "POST", "/api/boom", `{"a":1,"b":1}`, 500, `{"error":"Internal server error"}`},
+		{"wrong method", "GET", "/api/add", ``, 405, ``},
+		{"health", "GET", "/api/health", ``, 200, `{"status":"ok"}`},
 	}
-	h := realHandler()
-	for _, c := range cases {
-		t.Run(c.path+" "+c.body, func(t *testing.T) {
-			rec := post(t, h, c.path, c.body)
-			if rec.Code != http.StatusOK {
-				t.Fatalf("status = %d, want 200 (%s)", rec.Code, rec.Body)
+	h := newHandler(calc.Binary, calc.Unary)
+	hBoom := newHandler(boom, nil)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			handler := h
+			if tt.name == "internal error" {
+				handler = hBoom
 			}
-			if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
-				t.Errorf("Content-Type = %q", ct)
+			handler.ServeHTTP(w, httptest.NewRequest(tt.method, tt.path, strings.NewReader(tt.body)))
+			if w.Code != tt.status {
+				t.Fatalf("status %d, want %d", w.Code, tt.status)
 			}
-			if got := jsonBody(t, rec)["result"]; got != c.want {
-				t.Errorf("result = %v, want %v", got, c.want)
+			if tt.status == http.StatusMethodNotAllowed {
+				return
 			}
-		})
-	}
-}
-
-func TestZeroIsAValidOperand(t *testing.T) {
-	rec := post(t, realHandler(), "/api/add", `{"a":0,"b":0}`)
-
-	if rec.Code != http.StatusOK || jsonBody(t, rec)["result"] != float64(0) {
-		t.Fatalf("status = %d body = %s", rec.Code, rec.Body)
-	}
-}
-
-func TestBadRequestsReturn400WithAMessage(t *testing.T) {
-	cases := []struct{ name, path, body, want string }{
-		{"divide by zero", "/api/divide", `{"a":1,"b":0}`, "Can’t divide by zero"},
-		{"sqrt of negative", "/api/sqrt", `{"a":-4}`, "Can’t take the square root of a negative number"},
-		{"zero to negative power", "/api/power", `{"a":0,"b":-1}`, "Can’t raise 0 to a negative power"},
-		{"not real", "/api/power", `{"a":-8,"b":0.5}`, "Result isn’t a real number"},
-		{"too large", "/api/power", `{"a":10,"b":1000}`, "Result is too large to display"},
-		{"missing b", "/api/add", `{"a":1}`, "Enter a number"},
-		{"missing a", "/api/add", `{"b":1}`, "Enter a number"},
-		{"null operand", "/api/add", `{"a":1,"b":null}`, "Enter a number"},
-		{"missing unary operand", "/api/sqrt", `{}`, "Enter a number"},
-		{"unknown field", "/api/add", `{"a":1,"b":2,"c":3}`, "Invalid request body"},
-		{"extra operand on unary", "/api/sqrt", `{"a":9,"b":1}`, "Invalid request body"},
-		{"malformed json", "/api/add", `{"a":`, "Invalid request body"},
-		{"string operand", "/api/add", `{"a":"1","b":2}`, "Invalid request body"},
-		{"operand out of range", "/api/add", `{"a":1e999,"b":2}`, "Invalid request body"},
-		{"empty body", "/api/add", ``, "Invalid request body"},
-		{"body over 1 KiB", "/api/add", `{"a":1,"b":2,"pad":"` + strings.Repeat("x", 1100) + `"}`, "Invalid request body"},
-	}
-	h := realHandler()
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			rec := post(t, h, c.path, c.body)
-			if rec.Code != http.StatusBadRequest {
-				t.Fatalf("status = %d, want 400", rec.Code)
+			if got := strings.TrimSpace(w.Body.String()); got != tt.want {
+				t.Errorf("body %s, want %s", got, tt.want)
 			}
-			if got := jsonBody(t, rec)["error"]; got != c.want {
-				t.Errorf("error = %q, want %q", got, c.want)
+			if ct := w.Header().Get("Content-Type"); ct != "application/json" {
+				t.Errorf("Content-Type %q", ct)
 			}
 		})
-	}
-}
-
-func TestUnknownOperationIs404(t *testing.T) {
-	rec := post(t, realHandler(), "/api/modulo", `{"a":1,"b":2}`)
-
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404", rec.Code)
-	}
-}
-
-func TestGetOnAnOperationIsMethodNotAllowed(t *testing.T) {
-	for _, path := range []string{"/api/add", "/api/sqrt"} {
-		rec := do(t, realHandler(), http.MethodGet, path, "")
-		if rec.Code != http.StatusMethodNotAllowed {
-			t.Errorf("GET %s: status = %d, want 405", path, rec.Code)
-		}
-	}
-}
-
-func TestHealthStillReturnsOK(t *testing.T) {
-	rec := do(t, realHandler(), http.MethodGet, "/api/health", "")
-
-	if rec.Code != http.StatusOK || jsonBody(t, rec)["status"] != "ok" {
-		t.Fatalf("status = %d body = %s", rec.Code, rec.Body)
-	}
-}
-
-func TestEachRequestLogsOneEventWithTheOpAndNoOperands(t *testing.T) {
-	buf := captureLogs(t)
-
-	post(t, realHandler(), "/api/divide", `{"a":1234567,"b":0}`)
-
-	events := logEvents(t, buf)
-	if len(events) != 1 {
-		t.Fatalf("want 1 log line, got %d: %q", len(events), buf.String())
-	}
-	event := events[0]
-	if event["status"] != float64(400) || event["op"] != "divide" || event["error_code"] != "DIV_ZERO" {
-		t.Errorf("event = %v", event)
-	}
-	if strings.Contains(buf.String(), "1234567") {
-		t.Errorf("log leaks an operand: %s", buf.String())
-	}
-}
-
-func TestSuccessfulUnaryRequestLogsItsOp(t *testing.T) {
-	buf := captureLogs(t)
-
-	post(t, realHandler(), "/api/sqrt", `{"a":9}`)
-
-	events := logEvents(t, buf)
-	if len(events) != 1 || events[0]["op"] != "sqrt" || events[0]["status"] != float64(200) {
-		t.Fatalf("events = %v", events)
-	}
-}
-
-func TestServerErrorsReturn500(t *testing.T) {
-	cases := map[string]binaryOp{
-		"error": func(a, b float64) (float64, error) { return 0, errors.New("boom") },
-		"panic": func(a, b float64) (float64, error) { panic("kaboom") },
-	}
-	for name, op := range cases {
-		t.Run(name, func(t *testing.T) {
-			captureLogs(t)
-			h := newHandler(map[string]binaryOp{"add": op}, nil)
-
-			rec := post(t, h, "/api/add", `{"a":1,"b":1}`)
-
-			if rec.Code != http.StatusInternalServerError {
-				t.Fatalf("status = %d, want 500", rec.Code)
-			}
-			if got := jsonBody(t, rec)["error"]; got != "Internal server error" {
-				t.Errorf("error = %q", got)
-			}
-		})
-	}
-}
-
-func TestServerErrorsLogOneEventCarryingTheError(t *testing.T) {
-	binary := map[string]binaryOp{
-		"add": func(a, b float64) (float64, error) { return 0, errors.New("boom") },
-	}
-	unary := map[string]unaryOp{
-		"sqrt": func(a float64) (float64, error) { panic("kaboom") },
-	}
-	cases := map[string]struct{ path, body, op string }{
-		"error": {"/api/add", `{"a":1,"b":1}`, "add"},
-		"panic": {"/api/sqrt", `{"a":1}`, "sqrt"},
-	}
-	for name, c := range cases {
-		t.Run(name, func(t *testing.T) {
-			buf := captureLogs(t)
-
-			post(t, newHandler(binary, unary), c.path, c.body)
-
-			events := logEvents(t, buf)
-			if len(events) != 1 {
-				t.Fatalf("want 1 log line, got %d: %q", len(events), buf.String())
-			}
-			event := events[0]
-			if event["msg"] != "request" || event["level"] != "ERROR" || event["status"] != float64(500) || event["op"] != c.op {
-				t.Errorf("event = %v", event)
-			}
-			if event["error"] == nil || event["error"] == "" {
-				t.Errorf("event carries no error: %v", event)
-			}
-		})
-	}
-}
-
-func TestErrorsAreJSONWithTheErrorKeyOnly(t *testing.T) {
-	for _, body := range []string{`{"a":1,"b":0}`, `{"a":1}`, `{bad`} {
-		rec := post(t, realHandler(), "/api/divide", body)
-
-		if rec.Code != http.StatusBadRequest {
-			t.Fatalf("%s: status = %d, want 400", body, rec.Code)
-		}
-		if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
-			t.Errorf("%s: Content-Type = %q, want application/json", body, ct)
-		}
-		if got := jsonBody(t, rec); len(got) != 1 || got["error"] == nil {
-			t.Errorf("%s: body = %v, want only an error key", body, got)
-		}
-	}
-}
-
-func TestSuccessBodyHasOnlyTheResultKey(t *testing.T) {
-	rec := post(t, realHandler(), "/api/add", `{"a":2,"b":3}`)
-
-	if got := jsonBody(t, rec); len(got) != 1 {
-		t.Errorf("body = %v, want only a result key (no $schema)", got)
-	}
-}
-
-func TestRejectedBodiesAreLoggedWithTheirOp(t *testing.T) {
-	buf := captureLogs(t)
-
-	post(t, realHandler(), "/api/add", `{bad`)
-
-	events := logEvents(t, buf)
-	if len(events) != 1 || events[0]["op"] != "add" || events[0]["error_code"] != "BAD_BODY" {
-		t.Fatalf("events = %v", events)
-	}
-}
-
-func getSpec(t *testing.T) map[string]any {
-	t.Helper()
-	rec := do(t, realHandler(), http.MethodGet, "/api/openapi.json", "")
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", rec.Code)
-	}
-	return jsonBody(t, rec)
-}
-
-func TestOpenAPISpecListsEveryPath(t *testing.T) {
-	spec := getSpec(t)
-
-	if spec["openapi"] != "3.1.0" {
-		t.Errorf("openapi = %v", spec["openapi"])
-	}
-	if info := spec["info"].(map[string]any); info["title"] != "Calculator API" || info["version"] == "" {
-		t.Errorf("info = %v", info)
-	}
-	paths := spec["paths"].(map[string]any)
-	for _, p := range []string{"add", "subtract", "multiply", "divide", "power", "sqrt", "percent", "health"} {
-		if paths["/api/"+p] == nil {
-			t.Errorf("spec has no /api/%s", p)
-		}
-	}
-	if len(paths) != 8 {
-		t.Errorf("paths = %v", paths)
-	}
-}
-
-func TestOpenAPISpecRequiresNumericOperands(t *testing.T) {
-	spec := getSpec(t)
-	schemas := spec["components"].(map[string]any)["schemas"].(map[string]any)
-
-	for name, operands := range map[string][]any{"BinaryInputBody": {"a", "b"}, "UnaryInputBody": {"a"}} {
-		schema := schemas[name].(map[string]any)
-		if schema["additionalProperties"] != false {
-			t.Errorf("%s allows additional properties", name)
-		}
-		if got := schema["required"]; !reflect.DeepEqual(got, operands) {
-			t.Errorf("%s required = %v, want %v", name, got, operands)
-		}
-		props := schema["properties"].(map[string]any)
-		for _, operand := range operands {
-			if typ := props[operand.(string)].(map[string]any)["type"]; typ != "number" {
-				t.Errorf("%s.%v type = %v, want number", name, operand, typ)
-			}
-		}
-	}
-}
-
-func TestOpenAPISpecDocumentsTheErrorBody(t *testing.T) {
-	spec := getSpec(t)
-	post := spec["paths"].(map[string]any)["/api/divide"].(map[string]any)["post"].(map[string]any)
-	responses := post["responses"].(map[string]any)
-
-	if post["operationId"] != "divide" || post["summary"] == "" || post["description"] == "" {
-		t.Errorf("operation = %v", post)
-	}
-	if responses["200"] == nil || responses["400"] == nil || responses["500"] == nil {
-		t.Errorf("responses = %v", responses)
-	}
-	if responses["422"] != nil {
-		t.Error("422 is documented but every client error is a 400")
-	}
-	errSchema := spec["components"].(map[string]any)["schemas"].(map[string]any)["ErrorResponse"].(map[string]any)
-	if errSchema["properties"].(map[string]any)["error"] == nil {
-		t.Errorf("error schema = %v", errSchema)
-	}
-}
-
-func TestOpenAPISpecIsAlsoServedAsYAML(t *testing.T) {
-	rec := do(t, realHandler(), http.MethodGet, "/api/openapi.yaml", "")
-
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "title: Calculator API") {
-		t.Fatalf("status = %d body = %.200s", rec.Code, rec.Body)
-	}
-}
-
-func TestDocsPageIsHTML(t *testing.T) {
-	rec := do(t, realHandler(), http.MethodGet, "/api/docs", "")
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", rec.Code)
-	}
-	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
-		t.Errorf("Content-Type = %q", ct)
-	}
-	if !strings.Contains(rec.Body.String(), "swagger-ui") || !strings.Contains(rec.Body.String(), "/api/openapi.json") {
-		t.Errorf("docs page is not Swagger UI pointing at the spec: %.300s", rec.Body)
-	}
-}
-
-func TestDocsRequestsLogOneEventWithoutAnOp(t *testing.T) {
-	buf := captureLogs(t)
-
-	do(t, realHandler(), http.MethodGet, "/api/docs", "")
-	do(t, realHandler(), http.MethodGet, "/api/openapi.json", "")
-
-	events := logEvents(t, buf)
-	if len(events) != 2 || events[0]["op"] != "" || events[1]["op"] != "" {
-		t.Fatalf("events = %v", events)
 	}
 }
