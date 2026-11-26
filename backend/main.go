@@ -1,19 +1,28 @@
 package main
 
 import (
-	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
+	"time"
+
+	"calculator_app/backend/calc"
 )
 
 func main() {
-	mux := http.NewServeMux()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 
-	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-	})
+	server := &http.Server{
+		Addr:              ":8080",
+		Handler:           newHandler(calc.Evaluate),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+	}
 
-	log.Println("backend listening on :8080")
-	log.Fatal(http.ListenAndServe(":8080", mux))
+	slog.Info("backend listening", "addr", server.Addr)
+	if err := server.ListenAndServe(); err != nil {
+		slog.Error("server stopped", "error", err)
+		os.Exit(1)
+	}
 }
