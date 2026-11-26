@@ -6,36 +6,36 @@ import (
 	"io"
 	"net/http"
 
-	"calculator_app/backend/calc"
 	"calculator_app/backend/models"
+	"calculator_app/backend/operations"
 )
 
 func Add(writer http.ResponseWriter, request *http.Request) {
-	handleTwoOperands(writer, request, calc.Add)
+	handleTwoOperands(writer, request, operations.Add)
 }
 
 func Subtract(writer http.ResponseWriter, request *http.Request) {
-	handleTwoOperands(writer, request, calc.Subtract)
+	handleTwoOperands(writer, request, operations.Subtract)
 }
 
 func Multiply(writer http.ResponseWriter, request *http.Request) {
-	handleTwoOperands(writer, request, calc.Multiply)
+	handleTwoOperands(writer, request, operations.Multiply)
 }
 
 func Divide(writer http.ResponseWriter, request *http.Request) {
-	handleTwoOperands(writer, request, calc.Divide)
+	handleTwoOperands(writer, request, operations.Divide)
 }
 
 func Power(writer http.ResponseWriter, request *http.Request) {
-	handleTwoOperands(writer, request, calc.Power)
+	handleTwoOperands(writer, request, operations.Power)
 }
 
 func Sqrt(writer http.ResponseWriter, request *http.Request) {
-	handleOneOperand(writer, request, calc.Sqrt)
+	handleOneOperand(writer, request, operations.Sqrt)
 }
 
 func Percent(writer http.ResponseWriter, request *http.Request) {
-	handleOneOperand(writer, request, calc.Percent)
+	handleOneOperand(writer, request, operations.Percent)
 }
 
 func handleTwoOperands(writer http.ResponseWriter, request *http.Request, operation func(firstOperand, secondOperand float64) (float64, error)) {
@@ -83,15 +83,15 @@ func writeResult(writer http.ResponseWriter, result float64, err error) {
 	case err != nil:
 		writeError(writer, http.StatusInternalServerError, "Internal server error")
 	default:
-		writeJSON(writer, http.StatusOK, map[string]float64{"result": result})
+		writeJSON(writer, http.StatusOK, models.ResultResponse{Result: result})
 	}
 }
 
 func writeError(writer http.ResponseWriter, status int, message string) {
-	writeJSON(writer, status, map[string]string{"error": message})
+	writeJSON(writer, status, models.ErrorResponse{Error: message})
 }
 
-func writeJSON(writer http.ResponseWriter, status int, body any) {
+func writeJSON[Body models.ResultResponse | models.ErrorResponse](writer http.ResponseWriter, status int, body Body) {
 	writer.Header().Set("Content-Type", "application/json")
 	writer.WriteHeader(status)
 	_ = json.NewEncoder(writer).Encode(body)
