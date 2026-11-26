@@ -70,7 +70,10 @@ describe("keypad and keyboard", () => {
     expect(app.pending()).toHaveTextContent("2 + 3 =");
     expect(backend).toHaveBeenCalledTimes(1);
     expect(backend.mock.calls[0][0].url).toBe("/add");
-    expect(bodyOf(backend.mock.calls[0][0])).toEqual({ a: 2, b: 3 });
+    expect(bodyOf(backend.mock.calls[0][0])).toEqual({
+      firstOperand: 2,
+      secondOperand: 3,
+    });
     await waitFor(() => expect(app.panel).toHaveFocus());
   });
 
@@ -99,8 +102,8 @@ describe("keypad and keyboard", () => {
 
     await waitFor(() => shows(app.value(), "1,001"));
     expect(backend.mock.calls.map(([config]) => bodyOf(config))).toEqual([
-      { a: 999, b: 1 },
-      { a: 1000, b: 1 },
+      { firstOperand: 999, secondOperand: 1 },
+      { firstOperand: 1000, secondOperand: 1 },
     ]);
   });
 });
@@ -130,8 +133,8 @@ describe("errors", () => {
 
     await waitFor(() => shows(app.value(), "5"));
     expect(backend.mock.calls.map(([config]) => bodyOf(config))).toEqual([
-      { a: 2, b: 3 },
-      { a: 2, b: 3 },
+      { firstOperand: 2, secondOperand: 3 },
+      { firstOperand: 2, secondOperand: 3 },
     ]);
     await waitFor(() => expect(snackbar()).toBeNull());
     expect(app.panel).toHaveFocus();

@@ -62,9 +62,9 @@ export const fail =
 export const bodyOf = (config: Config): unknown => JSON.parse(config.data);
 
 export const fakeBackend: Adapter = (config) => {
-  const { a: firstOperand, b: secondOperand } = bodyOf(config) as {
-    a: number;
-    b?: number;
+  const { firstOperand, secondOperand } = bodyOf(config) as {
+    firstOperand: number;
+    secondOperand?: number;
   };
   const answer = evaluate(
     (config.url ?? "").slice(1) as Operation,

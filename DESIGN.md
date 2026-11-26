@@ -174,8 +174,8 @@ One endpoint per operation, `POST /api/<operation>` with `Content-Type: applicat
 
 | Operation | Path | Body |
 |---|---|---|
-| add, subtract, multiply, divide, power | `/api/add`, `/api/subtract`, `/api/multiply`, `/api/divide`, `/api/power` | `{ "a": 2, "b": 3 }` |
-| square root, percent (a ÷ 100) | `/api/sqrt`, `/api/percent` | `{ "a": 9 }` |
+| add, subtract, multiply, divide, power | `/api/add`, `/api/subtract`, `/api/multiply`, `/api/divide`, `/api/power` | `{ "firstOperand": 2, "secondOperand": 3 }` |
+| square root, percent (firstOperand ÷ 100) | `/api/sqrt`, `/api/percent` | `{ "firstOperand": 9 }` |
 
 ```
 200 OK            { "result": 5 }

@@ -10,10 +10,10 @@ export async function callOperation(
   operands: { firstOperand: number; secondOperand?: number },
 ): Promise<number> {
   try {
-    const { data } = await api.post<{ result: number }>(`/${operation}`, {
-      a: operands.firstOperand,
-      b: operands.secondOperand,
-    });
+    const { data } = await api.post<{ result: number }>(
+      `/${operation}`,
+      operands,
+    );
     return data.result;
   } catch (error) {
     if (

@@ -17,7 +17,10 @@ describe("callOperation", () => {
       requestConfig.url,
       requestConfig.timeout,
     ]).toEqual(["/api", "/add", 10_000]);
-    expect(bodyOf(requestConfig)).toEqual({ a: 2, b: 3 });
+    expect(bodyOf(requestConfig)).toEqual({
+      firstOperand: 2,
+      secondOperand: 3,
+    });
   });
 
   it("maps a 400 to ApiValidationError with the server message", async () => {
