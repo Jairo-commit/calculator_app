@@ -17,7 +17,7 @@ func TestResults(t *testing.T) {
 		{"power", func() (float64, error) { return Power(2, 10) }, 1024},
 		{"sqrt", func() (float64, error) { return Sqrt(9) }, 3},
 		{"percent", func() (float64, error) { return Percent(15) }, 0.15},
-		{"big values are not rounded", func() (float64, error) { return Add(1e15, 0.5) }, 1e15 + 0.5},
+		{"values above 1e15 keep their fraction", func() (float64, error) { return Add(1e15, 0.5) }, 1e15 + 0.5},
 		{"large integers stay exact", func() (float64, error) { return Add(994399757, 0) }, 994399757},
 		{"larger integers stay exact", func() (float64, error) { return Multiply(7439835882, 1) }, 7439835882},
 	}

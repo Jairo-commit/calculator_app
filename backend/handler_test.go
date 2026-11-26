@@ -31,6 +31,7 @@ func TestHandler(t *testing.T) {
 		{"unknown field", "POST", "/api/sqrt", `{"a":9,"c":1}`, 400, `{"error":"Invalid request body"}`},
 		{"oversize body", "POST", "/api/sqrt", `{"a":9` + strings.Repeat(" ", 2000) + `}`, 400, `{"error":"Invalid request body"}`},
 		{"trailing garbage", "POST", "/api/sqrt", `{"a":9}{"zzz`, 400, `{"error":"Invalid request body"}`},
+		{"trailing brace", "POST", "/api/sqrt", `{"a":9}}`, 400, `{"error":"Invalid request body"}`},
 		{"internal error", "POST", "/api/boom", `{"a":1,"b":1}`, 500, `{"error":"Internal server error"}`},
 		{"wrong method", "GET", "/api/add", ``, 405, ``},
 		{"health", "GET", "/api/health", ``, 200, `{"status":"ok"}`},

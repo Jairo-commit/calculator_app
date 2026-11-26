@@ -29,7 +29,8 @@ func finish(x float64) (float64, error) {
 	case math.IsInf(x, 0):
 		return 0, errTooLarge
 	}
-	// Round via the decimal text: x*1e10 loses precision above ~1e9.
+	// Round via the decimal text: x*1e10 loses precision above ~1e9. The parse
+	// cannot fail: 'f' output of a finite float is always a valid number.
 	x, _ = strconv.ParseFloat(strconv.FormatFloat(x, 'f', 10, 64), 64)
 	if x == 0 {
 		return 0, nil
