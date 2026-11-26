@@ -205,3 +205,14 @@ Apply after the rewrite, on the frontend PR only.
   - Keep the "ignore keys while pending" guard.
 - Tests: wrap `renderHook` and `render` in a fresh `QueryClientProvider` per test (put a helper in `src/test/setup.ts` or a test util next to the tests). Keep the `fetch` stubs. Update `calculate.test.ts` for the axios error mapping, including the timeout.
 - Update the README's frontend section to list the stack: MUI, Axios, TanStack Query.
+
+## Simplification (user decision, supersedes Huma/logging/rounding details above)
+- **Backend:** plain `net/http`, no Huma, no docs page (the README documents the API), and no logging middleware.
+  - Contract unchanged: `200 {"result"}`, `400 {"error"}` (calc message / "Enter a number" / "Invalid request body"), `500 {"error":"Internal server error"}`.
+  - Rounding becomes `math.Round(x*1e10)/1e10`, skipped for |x| ≥ 1e15. Go/JS parity no longer matters because the frontend does no maths.
+  - go.mod has no dependencies again, and the Dockerfile matches main.
+  - Target: about 300 lines including tests.
+- **Frontend:** about 1,100 lines including tests, with the same features (history, keyboard, Retry snackbar, MUI, Axios, TanStack Query).
+  - One state module of about 150 lines.
+  - Lean behaviour tests: one per feature, shared setup, no duplication.
+  - Keeps review round 1 fixes: Enter always means `=`; focus returns to the panel after Retry, Dismiss, Clear and loading; history is disabled while loading; DESIGN §6/§10 wording; any state-changing key closes the snackbar; other errors open the snackbar; typed operands aren't rounded on screen; visible focus ring.

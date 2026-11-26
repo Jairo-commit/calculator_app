@@ -1,48 +1,50 @@
+import CloseIcon from "@mui/icons-material/Close";
 import HistoryIcon from "@mui/icons-material/History";
 import AppBar from "@mui/material/AppBar";
+import Button from "@mui/material/Button";
 import Container from "@mui/material/Container";
 import Drawer from "@mui/material/Drawer";
 import IconButton from "@mui/material/IconButton";
 import Paper from "@mui/material/Paper";
+import Snackbar from "@mui/material/Snackbar";
 import Stack from "@mui/material/Stack";
 import { useTheme } from "@mui/material/styles";
 import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import CalculatorPanel from "./components/CalculatorPanel";
-import ErrorSnackbar from "./components/ErrorSnackbar";
 import HistoryPanel from "./components/HistoryPanel";
 import { useCalculator } from "./hooks/useCalculator";
-import type { HistoryEntry } from "./lib/history";
 
 export default function App() {
   const calc = useCalculator();
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("md"), {
+  const isMobile = useMediaQuery(useTheme().breakpoints.down("md"), {
     noSsr: true,
   });
   const [drawerOpen, setDrawerOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
-  // The drawer restores focus to its trigger when it closes, so after a reuse
-  // the calculator is focused only once the drawer has finished closing.
-  const focusPanelOnDrawerExit = useRef(false);
+  const focusPanel = () => panelRef.current?.focus();
 
-  const handleReuse = (entry: HistoryEntry) => {
-    calc.reuse(entry);
-    if (isMobile) {
-      focusPanelOnDrawerExit.current = true;
-      setDrawerOpen(false);
-    } else {
-      panelRef.current?.focus();
-    }
-  };
+  // Focus the calculator on mount and when a request ends: the "=" key that
+  // was clicked is disabled while loading, so focus would be lost.
+  useEffect(() => {
+    if (!calc.loading) panelRef.current?.focus();
+  }, [calc.loading]);
 
   const history = (
     <HistoryPanel
       history={calc.history}
-      onReuse={handleReuse}
-      onClear={calc.clearHistory}
+      disabled={calc.loading}
+      onReuse={(result) => {
+        calc.reuse(result);
+        setDrawerOpen(false);
+        focusPanel();
+      }}
+      onClear={() => {
+        calc.clearHistory();
+        focusPanel();
+      }}
     />
   );
 
@@ -70,22 +72,15 @@ export default function App() {
       <Container
         component="main"
         maxWidth={false}
-        sx={{
-          maxWidth: 1040,
-          py: { xs: 2, md: 5 },
-          display: { xs: "flex", sm: "block" },
-          flexDirection: "column",
-          minHeight: { xs: "calc(100dvh - 56px)", sm: "auto" },
-        }}
+        sx={{ maxWidth: 1040, py: { xs: 2, md: 5 } }}
       >
         <Stack
           direction={{ xs: "column", md: "row" }}
           gap={3}
-          alignItems={{ xs: "stretch", md: "flex-start" }}
-          sx={{ flex: { xs: 1, sm: "initial" } }}
+          alignItems="flex-start"
         >
           <CalculatorPanel
-            onKeyPress={calc.press}
+            onPress={calc.press}
             loading={calc.loading}
             display={calc.display}
             panelRef={panelRef}
@@ -103,32 +98,46 @@ export default function App() {
           anchor="bottom"
           open={drawerOpen}
           onClose={() => setDrawerOpen(false)}
-          slotProps={{
-            paper: {
-              sx: {
-                maxHeight: "70dvh",
-                borderTopLeftRadius: 4,
-                borderTopRightRadius: 4,
-              },
-            },
-            transition: {
-              onExited: () => {
-                if (focusPanelOnDrawerExit.current) {
-                  focusPanelOnDrawerExit.current = false;
-                  panelRef.current?.focus();
-                }
-              },
-            },
-          }}
+          // The drawer would return focus to its button; the calculator wins.
+          disableRestoreFocus
+          slotProps={{ transition: { onExited: focusPanel } }}
         >
           {history}
         </Drawer>
       )}
 
-      <ErrorSnackbar
-        open={calc.serverErrorOpen}
-        onRetry={calc.retry}
-        onDismiss={calc.dismissServerError}
+      <Snackbar
+        open={calc.snackbarOpen}
+        anchorOrigin={{
+          vertical: isMobile ? "top" : "bottom",
+          horizontal: "center",
+        }}
+        message="Couldn't reach the server. Your input is kept."
+        action={
+          <>
+            <Button
+              color="inherit"
+              size="small"
+              onClick={() => {
+                calc.retry();
+                focusPanel();
+              }}
+            >
+              Retry
+            </Button>
+            <IconButton
+              color="inherit"
+              size="small"
+              aria-label="Dismiss"
+              onClick={() => {
+                calc.dismiss();
+                focusPanel();
+              }}
+            >
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          </>
+        }
       />
     </>
   );

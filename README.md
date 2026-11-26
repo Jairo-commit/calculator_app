@@ -95,30 +95,18 @@ docker compose run --rm --no-deps backend go test -count=1 ./...
 React + Vite + TypeScript with MUI (UI), Axios (HTTP) and TanStack Query (request state), at http://localhost:3000. It works like an old pocket calculator:
 
 1. Enter a number, press an operator (`+ − × ÷ xʸ`), then enter another number.
-2. Pressing a second operator or `=` computes the pending operation through the backend, shows the result and waits for the next number. `2 + 3 +` shows 5.
-3. Pressing two operators in a row just swaps the pending operation.
-4. `√` and `%` act at once on the number on screen. `%` divides by 100, so `80 × 15 %` shows 0.15 and `=` gives 12.
-5. After `=`, a digit starts a new number and an operator continues from the result.
-6. `CE` clears the number being entered and keeps the pending operation, `⌫` removes the last digit, and `C` resets everything.
+2. A second operator or `=` computes the pending operation through the backend, shows the result and waits for the next number. `2 + 3 +` shows 5. Two operators in a row swap the pending operation.
+3. `√` and `%` act at once on the number on screen. `%` divides by 100, so `80 × 15 %` shows 0.15 and `=` gives 12.
+4. After `=`, a digit starts a new number and an operator continues from the result.
+5. `CE` clears the number being entered and keeps the pending operation, `⌫` removes the last digit, and `C` resets everything.
 
-A small line above the display shows the pending operation (`5 +`) or the finished equation (`2 + 3 =`). An error such as dividing by zero shows its message on the display; a digit, `C` or `CE` recovers. If the server can’t be reached, a snackbar offers Retry and the calculator keeps its state. The history panel (a drawer on phones) keeps the last 8 calculations; clicking one loads its result. The design spec is in [DESIGN.md](DESIGN.md).
+A small line above the display shows the pending operation (`5 +`) or the finished equation (`2 + 3 =`). An error such as dividing by zero shows its message on the display; a digit, `C` or `CE` recovers. If the server can’t be reached (network, timeout of 10 s or a 5xx), a snackbar offers Retry and the calculator keeps its state. The history keeps the last 8 calculations in `localStorage`; clicking one loads its result. Below 900px wide the history is a drawer. The design spec is in [DESIGN.md](DESIGN.md).
 
-### Keyboard shortcuts
-
-| Key | Action |
-|---|---|
-| `0-9`, `.` | digits |
-| `+ - * / ^` | add, subtract, multiply, divide, power |
-| `Enter` or `=` | equals |
-| `Backspace` | ⌫ |
-| `Delete` | CE |
-| `Escape` | C |
-| `r` | √ |
-| `%` | % |
+Keyboard: `0-9 .`, `+ - * / ^`, `Enter` or `=` (equals), `Backspace` (⌫), `Delete` (CE), `Escape` (C), `r` (√) and `%`.
 
 ## Frontend tests
 
-Everything runs in Docker, so nothing needs to be installed locally.
+Vitest and Testing Library run in Docker, with the Axios adapter faked, so no backend is needed.
 
 ```bash
 docker compose run --rm --no-deps frontend npm test
@@ -126,5 +114,3 @@ docker compose run --rm --no-deps frontend npm run lint
 docker compose run --rm --no-deps frontend npm run format:check   # or: npm run format
 docker compose run --rm --no-deps frontend npm run build          # tsc + vite build
 ```
-
-To run the frontend tools directly on your machine, you need Node 22.12 or newer (Vite 8, vitest and eslint 10 require it).

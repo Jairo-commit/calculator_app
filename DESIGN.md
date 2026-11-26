@@ -7,9 +7,9 @@ Files that come with this spec:
 | File | What it is |
 |---|---|
 | `lib/calculator.ts` | Operation names, op symbols, the keypad definition, `formatResult` and the physical-keyboard map. It does no math. |
-| `theme.ts` | MUI theme + keypad colour tokens. |
+| `lib/calculatorState.ts` | The state machine: reducer, request-for-key and display derivation. |
 
-Stack: React 18+, TypeScript, `@mui/material` v5/v6, `@emotion/react`, `@emotion/styled`. The frontend never calculates: every result comes from the backend (one endpoint per operation, see §8).
+Stack: React, TypeScript, `@mui/material`, Axios (one instance, `baseURL: /api`, 10 s `timeout`) and TanStack Query (`useMutation`, no retries). The frontend never calculates: every result comes from the backend (one endpoint per operation, see §8).
 
 ---
 
@@ -32,16 +32,15 @@ Stack: React 18+, TypeScript, `@mui/material` v5/v6, `@emotion/react`, `@emotion
  Container maxWidth=1040, py 40px (16px mobile)
    Stack direction={{ xs:'column', md:'row' }} gap 24px, alignItems flex-start
      Paper  <CalculatorPanel> (tabIndex 0)     – flex 1 1 420px, maxWidth 560; takes the physical keyboard
-       Box p=24px
-         ResultDisplay                         – pending line + value, see §5
+       output p=24px                           – pending line + value, see §5
        LinearProgress (only while loading)     – 4px, full width, flush between sections
        Box Keypad  bg #fafafa, p 20px 24px 24px – see §6
      Paper  <HistoryPanel>  (md and up)        – flex 1 1 300px – see §7
    Drawer anchor="bottom" <HistoryPanel> (xs/sm)
- Snackbar (network errors)                     – see §8
+ Snackbar (server errors)                       – see §8
 ```
 
-Breakpoint: below `md` (900px) → single column, History moves into a bottom `Drawer` opened from the AppBar icon. On phones (≤ 600px) the keypad keys grow to 64px tall with a 10px gap and the keypad sits at the bottom of the screen (display above it fills the remaining space, content aligned to the bottom).
+Breakpoint: below `md` (900px) → single column, History moves into a bottom `Drawer` opened from the AppBar icon. On phones (≤ 600px) the keypad keys grow to 64px tall with a 10px gap.
 
 ---
 
@@ -52,20 +51,20 @@ Breakpoint: below `md` (900px) → single column, History moves into a bottom `D
 | Primary | `#1976d2` (hover `#1565c0`, tint `#e3f2fd`) |
 | Function keys (√ xʸ %) | bg `#f3e5f5`, text `#6a1b9a` |
 | Operator keys (÷ × − +) | bg `#e3f2fd`, text `#0d47a1` |
-| Error | `#d32f2f` (alert bg `#fdeded`, alert text `#5f2120`) |
+| Error | `#d32f2f` |
 | Page background | `#f5f5f5`; keypad area `#fafafa` |
 | Text | primary `rgba(0,0,0,0.87)`, secondary `rgba(0,0,0,0.6)`, disabled `rgba(0,0,0,0.38)` |
 | Fonts | Roboto (UI), **Roboto Mono** (display, history) |
 | Radius | 4px everywhere |
 | Elevation | Paper `elevation={2}`, AppBar default (4) |
 
-All in `theme.ts`.
+Page background is in `theme.ts`; key colours are in `Keypad.tsx`.
 
 ---
 
 ## 4. Physical keyboard
 
-There is no text field. The calculator `Paper` has `tabIndex={0}`, is focused on mount (and after a history entry is reused) and handles `onKeyDown` itself, not a global listener.
+There is no text field. The calculator `Paper` has `tabIndex={0}`, is focused on mount, after a request ends, and after Retry, Dismiss, history Clear or a history entry is used and handles `onKeyDown` itself, not a global listener.
 
 | Key | Action |
 |---|---|
@@ -79,7 +78,7 @@ There is no text field. The calculator `Paper` has `tabIndex={0}`, is focused on
 | `%` | % |
 
 - Keys pressed with Ctrl, Meta or Alt are left to the browser.
-- `Enter` from a focused `<button>` is skipped, because the browser already clicks the button.
+- `Enter` always means `=`, even when a key button has focus: `preventDefault` stops the browser from clicking that button too.
 
 ---
 
@@ -88,7 +87,7 @@ There is no text field. The calculator `Paper` has `tabIndex={0}`, is focused on
 Right-aligned block, `aria-live="polite"`, rendered as `<output>`.
 
 - **Pending line** (small, Roboto Mono 14px, secondary text, always reserves its height): `5 +` while an operator is pending, `2 + 3 =` after equals, empty otherwise.
-- **Value**: Roboto Mono 48px / line-height 1.167, `whiteSpace: nowrap`, `overflowX: auto`. A typed number is shown as typed; a result is formatted with `formatResult()` (`en-US` grouping, up to 10 decimals, true minus sign).
+- **Value**: Roboto Mono 48px / line-height 1.167, wrapping with `overflowWrap: anywhere`. A typed number is shown exactly as typed; a result is formatted with `formatResult()` (`en-US` grouping, up to 10 decimals, true minus sign).
 - **Error**: the server's message replaces the value, in the error colour (`#d32f2f`), 24px, wrapping.
 
 ---
@@ -106,7 +105,7 @@ CSS grid, **4 equal columns**, gap 12px (10px mobile), keys 56px tall (64px mobi
  [ 0 ]     .    [ = ]   ← "0" spans 2 columns
 ```
 
-Each key is a real `<Button>` (`disableElevation` except "="), 20px Roboto 500, `textTransform: none`, `minWidth: 0`, `aria-label` from `KeyDef.ariaLabel`. Styling by `kind` (`keyColors` in `theme.ts`):
+Each key is a real `<Button>` (`disableElevation` except "="), 20px Roboto 500, `textTransform: none`, `minWidth: 0`, `aria-label` from `KeyDef.aria`. Styling by `kind` (`COLORS` in `Keypad.tsx`):
 
 | kind | Keys | Look (MUI equivalent) |
 |---|---|---|
@@ -117,7 +116,7 @@ Each key is a real `<Button>` (`disableElevation` except "="), 20px Roboto 500, 
 | `clear` | `C` | outlined error (red text, light red border) |
 | `equals` | `=` | `variant="contained" color="primary"`, elevation 2 |
 
-Key behaviour (the state machine in `useCalculator.ts`):
+Key behaviour (the state machine in `lib/calculatorState.ts`):
 
 - **Digit or `.`**: if a result is showing (or an error), start a new number; otherwise append. One `.` per number, at most 15 digits, no leading zeros.
 - **`+ − × ÷ xʸ`**:
@@ -128,10 +127,10 @@ Key behaviour (the state machine in `useCalculator.ts`):
 - **`√` / `%`**: act at once on the number on screen. `%` divides by 100, so `80 × 15 %` shows 0.15 and `=` gives 12. A second number counts as entered, so `2 + 9 √ =` gives 5.
 - **CE**: sets the display to 0 and clears an error; the pending operator stays.
 - **⌫**: only while typing; removes the last character, falling back to 0.
-- **C**: resets everything and cancels a request in flight.
+- **C**: resets everything. A request in flight is not cancelled (the HTTP call finishes), but its answer is discarded.
 - **After a server error** (see §8) only a digit, C and CE work.
 - **While loading** every key except C is ignored and `=` is disabled ("Calculating…").
-- Keep focus behaviour default; `focus-visible` ring 2px primary.
+- The calculator panel shows a 2px primary `:focus-visible` ring.
 
 ---
 
@@ -141,9 +140,9 @@ Key behaviour (the state machine in `useCalculator.ts`):
 - List: `List` of `ListItemButton`, right-aligned, each showing
   - line 1: `{expr} =` — mono 14px, secondary text (`2 + 3`, `√9`, `15%`)
   - line 2: `{result}` — mono 20px/500
-  - `aria-label="Reuse {expr} = {result}"`; click loads the **result** into the display as a fresh number (when an operator is pending it is the second number).
+  - `aria-label="Reuse {expr} = {result}"`, disabled while a request is in flight; click loads the **result** into the display as a fresh number (when an operator is pending it is the second number).
 - Newest first, keep the last **8**. Every successful call adds an entry, including the ones that only chain to the next operator.
-- Empty state: clock icon (40px, disabled colour), "No calculations yet. Results you calculate will show up here." centred, 40px padding.
+- Empty state: "No calculations yet. Results you calculate will show up here." centred, 40px padding.
 - Persisted in `localStorage`.
 
 ---
@@ -161,10 +160,11 @@ press(key):
                                       the pending operator is dropped
       network / 5xx / timeout (10s) → Snackbar: "Couldn't reach the server. Your input is kept." + action "Retry";
                                       the calculator state is left unchanged
+      (any other error is treated the same way)
     setLoading(false)
 ```
 
-Retry re-sends the failed request and applies the answer as if it had just succeeded.
+Retry re-sends the same operands and applies the answer as if it had just succeeded. Any key that changes state, Retry and Dismiss close the snackbar.
 
 Error placement rule: **anything the user can fix → on the display. Anything about the server → Snackbar.**
 
@@ -211,29 +211,27 @@ Results are rounded to at most 10 decimal places and 15 significant digits, half
 
 ---
 
-## 10. Suggested component / file layout
+## 10. File layout
 
 ```
 src/
   theme.ts
   lib/calculator.ts              ← operations, KEYPAD, formatResult, keyboard map
+  lib/calculatorState.ts         ← reducer, requestFor(state, key), displayOf(state)
   lib/history.ts                 ← history entries, localStorage
-  api/calculate.ts               ← callOperation(op, operands), 10s AbortController timeout
-  hooks/useCalculator.ts         ← reducer state machine + requests; actions: press(key), retry, reuse, clearHistory
+  api/calculate.ts               ← the axios instance (10 s `timeout`, no AbortController) and callOperation(op, operands)
+  hooks/useCalculator.ts         ← reducer + useMutation; press(key), retry, reuse, clearHistory
   components/
-    CalculatorPanel.tsx          ← focusable Paper: ResultDisplay + LinearProgress + Keypad, keyboard handler
-    ResultDisplay.tsx
-    Keypad.tsx                   ← maps KEYPAD → KeypadButton
-    KeypadButton.tsx             ← styled(Button) by kind using keyColors
+    CalculatorPanel.tsx          ← focusable Paper: display, LinearProgress, Keypad, keyboard handler
+    Keypad.tsx                   ← KEYPAD → Buttons, coloured by kind
     HistoryPanel.tsx
-    ErrorSnackbar.tsx
-  App.tsx                        ← AppBar, layout, Drawer on mobile
+  App.tsx                        ← AppBar, layout, history Drawer on mobile, Snackbar, focus
 ```
 
 ## 11. Accessibility checklist
 
 - Every key is a `<Button>` with an `aria-label` for symbols (√, xʸ, ⌫, ÷ …).
-- The calculator is a focusable `role="group"` labelled "Calculator"; the display is `aria-live="polite"` and the value region is focusable so a long number can be scrolled.
+- The calculator is a focusable `role="group"` labelled "Calculator"; the display is `aria-live="polite"`.
 - LinearProgress has `aria-label="Calculating"`.
 - Touch targets ≥ 44px (keys are 56/64px). Visible focus ring on all controls.
 - Colour contrast: all key text/background pairs above pass WCAG AA.

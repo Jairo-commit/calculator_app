@@ -6,43 +6,25 @@ export interface HistoryEntry {
 export const HISTORY_LIMIT = 8;
 export const HISTORY_KEY = "calculator.history.v1";
 
-function isEntry(value: unknown): value is HistoryEntry {
-  if (typeof value !== "object" || value === null) return false;
-  const { expr, result } = value as Record<string, unknown>;
-  return (
-    typeof expr === "string" &&
-    typeof result === "number" &&
-    Number.isFinite(result)
-  );
-}
-
-/** Reads saved history; corrupt data or unavailable storage yields []. */
+/** Reads saved history; unreadable storage yields []. */
 export function loadHistory(): HistoryEntry[] {
   try {
-    const parsed: unknown = JSON.parse(
+    const saved: HistoryEntry[] = JSON.parse(
       localStorage.getItem(HISTORY_KEY) ?? "[]",
     );
-    return Array.isArray(parsed)
-      ? parsed.filter(isEntry).slice(0, HISTORY_LIMIT)
-      : [];
+    return saved
+      .filter((e) => typeof e.expr === "string" && Number.isFinite(e.result))
+      .slice(0, HISTORY_LIMIT);
   } catch {
     return [];
   }
 }
 
-/** Saves history; storage being unavailable or full is not an error for the user. */
+/** Best-effort: history still works for the session if storage is unavailable. */
 export function saveHistory(entries: readonly HistoryEntry[]): void {
   try {
     localStorage.setItem(HISTORY_KEY, JSON.stringify(entries));
   } catch {
-    // Persistence is best-effort; history still works for this session.
+    // ignored
   }
-}
-
-/** Returns a new list with the entry first, capped at HISTORY_LIMIT. */
-export function addEntry(
-  list: readonly HistoryEntry[],
-  entry: HistoryEntry,
-): HistoryEntry[] {
-  return [entry, ...list].slice(0, HISTORY_LIMIT);
 }

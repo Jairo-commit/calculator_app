@@ -1,38 +1,34 @@
 import Box from "@mui/material/Box";
 import LinearProgress from "@mui/material/LinearProgress";
 import Paper from "@mui/material/Paper";
-import { useEffect, type KeyboardEvent, type RefObject } from "react";
-import type { Display } from "../hooks/useCalculator";
-import { keyIdForPhysicalKey, type KeyId } from "../lib/calculator";
+import Typography from "@mui/material/Typography";
+import type { KeyboardEvent, RefObject } from "react";
+import { keyIdFor, type KeyId } from "../lib/calculator";
+import type { Display } from "../lib/calculatorState";
+import { MONO_FONT } from "../theme";
 import Keypad from "./Keypad";
-import ResultDisplay from "./ResultDisplay";
 
 interface CalculatorPanelProps {
-  onKeyPress: (id: KeyId) => void;
+  onPress: (id: KeyId) => void;
   loading: boolean;
   display: Display;
-  /** The focusable calculator; it receives the physical keyboard. */
+  /** The focusable panel; it receives the physical keyboard. */
   panelRef: RefObject<HTMLDivElement | null>;
 }
 
 export default function CalculatorPanel({
-  onKeyPress,
+  onPress,
   loading,
   display,
   panelRef,
 }: CalculatorPanelProps) {
-  useEffect(() => panelRef.current?.focus(), [panelRef]);
-
-  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.ctrlKey || event.metaKey || event.altKey) return;
-    // Enter on a focused key already clicks it; handling it too would press twice.
-    if (event.key === "Enter" && event.target instanceof HTMLButtonElement) {
-      return;
-    }
-    const id = keyIdForPhysicalKey(event.key);
+    const id = keyIdFor(event.key);
     if (id === null) return;
+    // Also stops Enter from clicking a focused key a second time.
     event.preventDefault();
-    onKeyPress(id);
+    onPress(id);
   };
 
   return (
@@ -41,35 +37,63 @@ export default function CalculatorPanel({
       role="group"
       aria-label="Calculator"
       tabIndex={0}
-      onKeyDown={handleKeyDown}
+      onKeyDown={onKeyDown}
       elevation={2}
       sx={{
-        flex: { xs: 1, sm: "0 0 auto", md: "1 1 420px" },
+        flex: { md: "1 1 420px" },
         maxWidth: { md: 560 },
         minWidth: 0,
-        display: "flex",
-        flexDirection: "column",
         overflow: "hidden",
         outline: "none",
+        "&:focus-visible": {
+          outline: "2px solid",
+          outlineColor: "primary.main",
+          outlineOffset: -2,
+        },
       }}
     >
       <Box
+        component="output"
+        aria-live="polite"
         sx={{
+          display: "block",
           p: 3,
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: { xs: "flex-end", sm: "flex-start" },
+          textAlign: "right",
+          fontFamily: MONO_FONT,
         }}
       >
-        <ResultDisplay {...display} />
+        <Typography
+          component="span"
+          data-testid="pending"
+          sx={{
+            display: "block",
+            minHeight: 20,
+            fontFamily: "inherit",
+            fontSize: 14,
+            color: "text.secondary",
+          }}
+        >
+          {display.pending}
+        </Typography>
+        <Typography
+          component="span"
+          data-testid="value"
+          sx={{
+            display: "block",
+            minHeight: 56,
+            fontFamily: "inherit",
+            fontSize: display.isError ? 24 : 48,
+            overflowWrap: "anywhere",
+            color: display.isError ? "error.main" : "text.primary",
+          }}
+        >
+          {display.value}
+        </Typography>
       </Box>
-      {loading ? (
-        <LinearProgress aria-label="Calculating" sx={{ height: 4 }} />
-      ) : (
-        <Box sx={{ height: 4 }} />
-      )}
-      <Keypad loading={loading} onPress={onKeyPress} />
+      <Box sx={{ height: 4 }}>
+        {loading && <LinearProgress aria-label="Calculating" />}
+      </Box>
+      <Keypad loading={loading} onPress={onPress} />
     </Paper>
   );
 }

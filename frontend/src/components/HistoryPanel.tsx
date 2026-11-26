@@ -1,4 +1,3 @@
-import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Divider from "@mui/material/Divider";
@@ -11,12 +10,17 @@ import { MONO_FONT } from "../theme";
 
 interface HistoryPanelProps {
   history: readonly HistoryEntry[];
-  onReuse: (entry: HistoryEntry) => void;
+  /** True while a calculation is in flight: entries can't be loaded then. */
+  disabled: boolean;
+  onReuse: (result: number) => void;
   onClear: () => void;
 }
 
+const mono = { display: "block", fontFamily: MONO_FONT } as const;
+
 export default function HistoryPanel({
   history,
+  disabled,
   onReuse,
   onClear,
 }: HistoryPanelProps) {
@@ -38,71 +42,40 @@ export default function HistoryPanel({
         >
           History
         </Typography>
-        <Button
-          disabled={history.length === 0}
-          onClick={onClear}
-          sx={{ minHeight: 44 }}
-        >
+        <Button disabled={history.length === 0} onClick={onClear}>
           Clear
         </Button>
       </Box>
       <Divider />
       {history.length === 0 ? (
-        <Box sx={{ p: 5, textAlign: "center" }}>
-          <AccessTimeIcon
-            aria-hidden
-            sx={{ fontSize: 40, color: "text.disabled" }}
-          />
-          <Typography color="text.secondary">
-            No calculations yet. Results you calculate will show up here.
-          </Typography>
-        </Box>
+        <Typography color="text.secondary" sx={{ p: 5, textAlign: "center" }}>
+          No calculations yet. Results you calculate will show up here.
+        </Typography>
       ) : (
         <List disablePadding>
-          {history.map((entry, index) => {
-            const result = formatResult(entry.result);
-            return (
-              <ListItemButton
-                // The same expression can be calculated twice, so the index is part of the key.
-                key={`${index}-${entry.expr}`}
-                aria-label={`Reuse ${entry.expr} = ${result}`}
-                onClick={() => onReuse(entry)}
-                sx={{
-                  minHeight: 44,
-                  display: "block",
-                  minWidth: 0,
-                  textAlign: "right",
-                }}
+          {history.map(({ expr, result }, index) => (
+            <ListItemButton
+              // The same expression can be calculated twice.
+              key={`${index}-${expr}`}
+              disabled={disabled}
+              aria-label={`Reuse ${expr} = ${formatResult(result)}`}
+              onClick={() => onReuse(result)}
+              sx={{ minHeight: 44, display: "block", textAlign: "right" }}
+            >
+              <Typography
+                component="span"
+                sx={{ ...mono, fontSize: 14, color: "text.secondary" }}
               >
-                <Typography
-                  component="span"
-                  sx={{
-                    display: "block",
-                    minWidth: 0,
-                    overflowWrap: "anywhere",
-                    fontFamily: MONO_FONT,
-                    fontSize: 14,
-                    color: "text.secondary",
-                  }}
-                >
-                  {entry.expr} =
-                </Typography>
-                <Typography
-                  component="span"
-                  sx={{
-                    display: "block",
-                    minWidth: 0,
-                    overflowWrap: "anywhere",
-                    fontFamily: MONO_FONT,
-                    fontSize: 20,
-                    fontWeight: 500,
-                  }}
-                >
-                  {result}
-                </Typography>
-              </ListItemButton>
-            );
-          })}
+                {expr} =
+              </Typography>
+              <Typography
+                component="span"
+                sx={{ ...mono, fontSize: 20, fontWeight: 500 }}
+              >
+                {formatResult(result)}
+              </Typography>
+            </ListItemButton>
+          ))}
         </List>
       )}
     </Box>
