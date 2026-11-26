@@ -38,6 +38,9 @@ export default function ResultDisplay({
       <Typography
         component="span"
         variant="h3"
+        tabIndex={0}
+        role="region"
+        aria-label="Result value"
         sx={{
           display: "block",
           fontFamily: MONO_FONT,

@@ -31,10 +31,12 @@ export interface CalculatorState {
   history: HistoryEntry[];
 }
 
-type Action =
+export type Action =
   | { type: "EDIT"; expr: string }
   | { type: "CLEAR" }
-  | { type: "CALC_INVALID"; message: string }
+  // expr is set when the message comes from the server, so a late answer for
+  // text the user has since edited can be ignored.
+  | { type: "CALC_INVALID"; message: string; expr?: string }
   | { type: "REQUEST_START" }
   | { type: "REQUEST_END" }
   | { type: "REQUEST_SUCCESS"; expr: string; result: number }
@@ -59,7 +61,10 @@ function edited(state: CalculatorState, expr: string): CalculatorState {
     expr,
     result: null,
     submittedError: null,
-    lastPreview: isBlank(expr) ? null : (preview(expr) ?? state.lastPreview),
+    lastPreview:
+      isBlank(expr) || liveError(expr) !== null
+        ? null
+        : (preview(expr) ?? state.lastPreview),
   };
 }
 
@@ -79,10 +84,11 @@ export function reducer(
         lastPreview: null,
       };
     case "CALC_INVALID":
+      if (action.expr !== undefined && state.expr !== action.expr) return state;
       // The user's input is never touched on an error.
       return { ...state, submittedError: action.message, result: null };
     case "REQUEST_START":
-      return { ...state, loading: true };
+      return { ...state, loading: true, serverErrorOpen: false };
     case "REQUEST_END":
       return { ...state, loading: false };
     case "REQUEST_SUCCESS":
@@ -139,6 +145,9 @@ export function displayOf(state: CalculatorState): Display {
   if (isBlank(state.expr)) {
     return { label: "Result", value: "0", tone: "disabled" };
   }
+  if (liveError(state.expr) !== null) {
+    return { label: "Result", value: "0", tone: "disabled" };
+  }
   const value = preview(state.expr) ?? state.lastPreview;
   return value === null
     ? { label: "Result", value: "0", tone: "disabled" }
@@ -176,7 +185,10 @@ export function nextExpression(
   } else if (continuesFromResult) {
     // Exponent notation (1e+21) is not valid input, so wrap the expression.
     const text = String(result).replace(/^-/, "−");
-    base = text.includes("e") ? `(${expr})` : text;
+    if (text.includes("e")) base = `(${expr})`;
+    // "−2 ^ 2" would read as −(2 ^ 2), so a negative base is parenthesised.
+    else if (key.id === "pow" && result < 0) base = `(${text})`;
+    else base = text;
   }
 
   return `${base}${key.insert ?? ""}`.replace(/ {2,}/g, " ").trimStart();
@@ -216,7 +228,7 @@ export function useCalculator() {
       dispatch({ type: "REQUEST_SUCCESS", expr, result });
     } catch (e) {
       if (e instanceof ApiValidationError) {
-        dispatch({ type: "CALC_INVALID", message: e.message });
+        dispatch({ type: "CALC_INVALID", message: e.message, expr });
       } else if (e instanceof ServerUnavailableError) {
         dispatch({ type: "REQUEST_FAILED" });
       } else if (!isAbort(e)) {
@@ -245,10 +257,8 @@ export function useCalculator() {
     () => dispatch({ type: "DISMISS_SERVER_ERROR" }),
     [],
   );
-  const retry = useCallback(() => {
-    dispatch({ type: "DISMISS_SERVER_ERROR" });
-    return calculate();
-  }, [calculate]);
+  // REQUEST_START closes the stale snackbar, so retrying is just calculating.
+  const retry = calculate;
 
   const press = useCallback(
     (key: KeyDef) => {

@@ -132,7 +132,11 @@ func TestEachRequestLogsOneEventWithoutTheExpression(t *testing.T) {
 	if event["status"] != float64(400) || event["expr_len"] != float64(6) || event["error_code"] != "DIV_ZERO" {
 		t.Errorf("event = %v", event)
 	}
-	if strings.Contains(lines[0], "48") {
-		t.Errorf("log leaks the expression: %s", lines[0])
+	// Check the field values rather than the raw line: the timestamp can
+	// contain any digits, so matching a fragment like "48" would be flaky.
+	for key, value := range event {
+		if s, ok := value.(string); ok && strings.Contains(s, "÷") {
+			t.Errorf("log field %q leaks the expression: %q", key, s)
+		}
 	}
 }

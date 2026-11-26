@@ -2,8 +2,8 @@ import CloseIcon from "@mui/icons-material/Close";
 import Button from "@mui/material/Button";
 import IconButton from "@mui/material/IconButton";
 import Snackbar from "@mui/material/Snackbar";
+import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import { theme } from "../theme";
 
 interface ErrorSnackbarProps {
   open: boolean;
@@ -17,6 +17,7 @@ export default function ErrorSnackbar({
   onRetry,
   onDismiss,
 }: ErrorSnackbarProps) {
+  const theme = useTheme();
   const isPhone = useMediaQuery(theme.breakpoints.down("sm"), { noSsr: true });
 
   return (

@@ -117,6 +117,7 @@ function tokenize(input: string): Token[] {
         value: parseFloat(input.slice(start, i)),
       });
     } else if (/^sqrt/i.test(input.slice(i, i + 4))) {
+      // ASCII-only and case-insensitive on purpose, to keep parity with Go.
       tokens.push({ kind: "SQRT", pos: i });
       i += 4;
     } else {
@@ -284,11 +285,10 @@ class Evaluator {
     return check(Math.pow(base, exp));
   }
 
-  // postfix := primary ('%')*
+  // postfix := primary '%'?   (the validator rejects "5%%")
   private postfix(): number {
-    let v = this.primary();
-    while (this.accept("PCT") !== null) v = check(v / 100);
-    return v;
+    const v = this.primary();
+    return this.accept("PCT") === null ? v : check(v / 100);
   }
 
   // primary := NUMBER | '(' expr ')'
@@ -314,10 +314,11 @@ const unexpectedToken = (): Error =>
 
 /**
  * Rounds to 10 decimal places. Rounds the absolute value so negatives behave
- * like positives (and like the Go engine); leaves |x| >= 1e15 untouched.
+ * like positives (and like the Go engine). |x| >= 1e15 keeps 15 significant
+ * digits so Math.pow and Go's math.Pow agree despite last-digit differences.
  */
 function round10(x: number): number {
-  if (Math.abs(x) >= 1e15) return x;
+  if (Math.abs(x) >= 1e15) return Number(x.toPrecision(15));
   return Math.sign(x) * (Math.round(Math.abs(x) * 1e10) / 1e10);
 }
 

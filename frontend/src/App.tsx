@@ -5,6 +5,7 @@ import Drawer from "@mui/material/Drawer";
 import IconButton from "@mui/material/IconButton";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
+import { useTheme } from "@mui/material/styles";
 import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
@@ -14,10 +15,10 @@ import ErrorSnackbar from "./components/ErrorSnackbar";
 import HistoryPanel from "./components/HistoryPanel";
 import { useCalculator } from "./hooks/useCalculator";
 import type { HistoryEntry } from "./lib/history";
-import { theme } from "./theme";
 
 export default function App() {
   const calc = useCalculator();
+  const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"), {
     noSsr: true,
   });

@@ -71,6 +71,11 @@ describe("nextExpression", () => {
     expect(nextExpression("−2 ^ 2", key("plus"), -4)).toBe("−4 + ");
   });
 
+  it("wraps a negative result in parentheses for xʸ only", () => {
+    expect(nextExpression("−2", key("pow"), -2)).toBe("(−2) ^ ");
+    expect(nextExpression("−2", key("plus"), -2)).toBe("−2 + ");
+  });
+
   it("wraps the expression when the result needs exponent notation", () => {
     expect(nextExpression("10 ^ 25", key("plus"), 1e25)).toBe("(10 ^ 25) + ");
   });
@@ -139,6 +144,91 @@ describe("useCalculator", () => {
 
     act(() => result.current.setExpr(""));
     expect(result.current.display.value).toBe("0");
+  });
+
+  it("shows no stale preview when the text has a live error", () => {
+    const { result } = renderHook(() => useCalculator());
+    act(() => result.current.setExpr("1250 × 15%"));
+    expect(result.current.display.value).toBe("187.5");
+
+    act(() => result.current.setExpr("1.2.3"));
+    expect(result.current.display).toEqual({
+      label: "Result",
+      value: "0",
+      tone: "disabled",
+    });
+
+    // Fixing the text must not resurrect the discarded preview either.
+    act(() => result.current.setExpr("1 + "));
+    expect(result.current.display.value).toBe("0");
+  });
+
+  it("continues xʸ from a negative result as (−2) ^ 2 = 4", async () => {
+    fetchMock
+      .mockResolvedValueOnce(json(200, { result: -2 }))
+      .mockResolvedValueOnce(json(200, { result: 4 }));
+    const { result } = renderHook(() => useCalculator());
+
+    await submit(result, "0 − 2");
+    act(() => result.current.press(key("pow")));
+    expect(result.current.expr).toBe("(−2) ^ ");
+    act(() => result.current.press(key("2")));
+    act(() => result.current.press(key("equals")));
+    await waitFor(() => expect(result.current.display.value).toBe("4"));
+  });
+
+  it("continues + from a positive result", async () => {
+    fetchMock.mockResolvedValueOnce(json(200, { result: 5 }));
+    const { result } = renderHook(() => useCalculator());
+
+    await submit(result, "2 + 3");
+    act(() => result.current.press(key("plus")));
+
+    expect(result.current.expr).toBe("5 + ");
+  });
+
+  it("ignores a server 400 for text edited during the request", async () => {
+    let finish: (r: Response) => void = () => {};
+    fetchMock.mockReturnValue(
+      new Promise<Response>((resolve) => (finish = resolve)),
+    );
+    const { result } = renderHook(() => useCalculator());
+    act(() => result.current.setExpr("1 + 1"));
+
+    let pending: Promise<void> = Promise.resolve();
+    act(() => {
+      pending = result.current.calculate();
+    });
+    act(() => result.current.setExpr("1 + 12"));
+    await act(async () => {
+      finish(json(400, { error: "Can’t divide by zero" }));
+      await pending;
+    });
+
+    expect(result.current.fieldError).toBeNull();
+  });
+
+  it("closes the server error as soon as a new request starts", async () => {
+    fetchMock.mockRejectedValueOnce(new TypeError("offline"));
+    const { result } = renderHook(() => useCalculator());
+    await submit(result, "2 + 2");
+    expect(result.current.serverErrorOpen).toBe(true);
+
+    let finish: (r: Response) => void = () => {};
+    fetchMock.mockReturnValueOnce(
+      new Promise<Response>((resolve) => (finish = resolve)),
+    );
+    let pending: Promise<void> = Promise.resolve();
+    act(() => {
+      pending = result.current.calculate();
+    });
+    expect(result.current.loading).toBe(true);
+    expect(result.current.serverErrorOpen).toBe(false);
+
+    await act(async () => {
+      finish(json(200, { result: 4 }));
+      await pending;
+    });
   });
 
   it("shows the result and records history on success", async () => {

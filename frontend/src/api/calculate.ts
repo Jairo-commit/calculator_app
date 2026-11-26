@@ -19,11 +19,18 @@ interface CalculateOptions {
   timeoutMs?: number;
 }
 
-/** Reads the JSON body of a response, or null when it is not JSON. */
-async function readJson(response: Response): Promise<unknown> {
+/**
+ * Reads the JSON body of a response, or null when it is not JSON. An abort
+ * while reading is not a bad body, so it is rethrown for the caller to map.
+ */
+async function readJson(
+  response: Response,
+  controller: AbortController,
+): Promise<unknown> {
   try {
     return await response.json();
-  } catch {
+  } catch (e) {
+    if (controller.signal.aborted) throw e;
     return null;
   }
 }
@@ -44,6 +51,7 @@ export async function calculateRemote(
 
   try {
     let response: Response;
+    let body: { result?: unknown; error?: unknown } | null;
     try {
       response = await fetch("/api/calculate", {
         method: "POST",
@@ -51,16 +59,12 @@ export async function calculateRemote(
         body: JSON.stringify({ expression }),
         signal: controller.signal,
       });
+      body = (await readJson(response, controller)) as typeof body;
     } catch (e) {
       // A caller abort is not a server problem: let it propagate untouched.
       if (signal?.aborted) throw e;
       throw new ServerUnavailableError(timedOut ? "timeout" : "network");
     }
-
-    const body = (await readJson(response)) as {
-      result?: unknown;
-      error?: unknown;
-    } | null;
 
     if (response.ok && typeof body?.result === "number") return body.result;
     if (response.status === 400 && typeof body?.error === "string") {

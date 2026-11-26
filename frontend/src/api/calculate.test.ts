@@ -104,6 +104,31 @@ describe("calculateRemote timeout", () => {
     await assertion;
   });
 
+  it("maps a timeout while the body is being read to a timeout error", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_url: string, init: RequestInit) => {
+        const body = new ReadableStream({
+          start(controller) {
+            init.signal?.addEventListener("abort", () =>
+              controller.error(new DOMException("aborted", "AbortError")),
+            );
+          },
+        });
+        return Promise.resolve(new Response(body, { status: 200 }));
+      }),
+    );
+
+    const promise = calculateRemote("1");
+    const assertion = expect(promise).rejects.toMatchObject({
+      name: "ServerUnavailableError",
+      kind: "timeout",
+    });
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    await assertion;
+  });
+
   it("does not time out a request that finished in time", async () => {
     vi.stubGlobal(
       "fetch",

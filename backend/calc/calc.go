@@ -85,6 +85,8 @@ func isBlank(r rune) bool {
 
 func isDigit(r rune) bool { return r >= '0' && r <= '9' }
 
+// isSqrtAt matches "sqrt" ASCII-only and case-insensitively on purpose, to
+// keep parity with the TypeScript engine.
 func isSqrtAt(runes []rune, i int) bool {
 	const word = "sqrt"
 	if i+len(word) > len(runes) {
@@ -378,14 +380,11 @@ func (e *evaluator) postfix() (float64, error) {
 	if err != nil {
 		return 0, err
 	}
-	for {
-		if _, ok := e.accept(tPct); !ok {
-			return v, nil
-		}
-		if v, err = check(v / 100); err != nil {
-			return 0, err
-		}
+	// The validator rejects "5%%", so a single optional % is all there is.
+	if _, ok := e.accept(tPct); !ok {
+		return v, nil
 	}
+	return check(v / 100)
 }
 
 func (e *evaluator) primary() (float64, error) {
@@ -417,11 +416,16 @@ func (e internalError) Error() string { return string(e) }
 
 const errUnexpected = internalError("calc: unexpected token after validation")
 
-// round10 rounds to 10 decimal places, symmetrically for negatives, and leaves
-// magnitudes of 1e15 and above untouched (they have no fractional digits left).
+// round10 rounds to 10 decimal places, symmetrically for negatives. Magnitudes
+// of 1e15 and above keep 15 significant digits instead, so math.Pow in Go and
+// Math.pow in V8 (which can differ in the last digits) give the same result.
 func round10(x float64) float64 {
 	if math.Abs(x) >= 1e15 {
-		return x
+		r, err := strconv.ParseFloat(strconv.FormatFloat(x, 'g', 15, 64), 64)
+		if err != nil {
+			return x
+		}
+		return r
 	}
 	return math.Copysign(math.Round(math.Abs(x)*1e10)/1e10, x)
 }

@@ -25,6 +25,22 @@
   },
   "cases": [
     {
+      "expr": "7 ^ 30",
+      "result": 2.25393402906923e25
+    },
+    {
+      "expr": "3 ^ 100",
+      "result": 5.15377520732011e47
+    },
+    {
+      "expr": "2\u00a0+\u00a03",
+      "result": 5
+    },
+    {
+      "expr": "2 + \ud83d\ude00",
+      "error": "Only numbers, + − × ÷ ^ √ % and ( ) are allowed"
+    },
+    {
       "expr": "(12 + 8) × 3",
       "result": 60
     },

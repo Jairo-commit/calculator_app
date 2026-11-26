@@ -82,8 +82,11 @@ func TestRound10IsSymmetricForNegatives(t *testing.T) {
 			t.Errorf("round10(-%v) = %v, want %v", x, got, want)
 		}
 	}
-	if got := round10(1e15 + 0.5); got != 1e15+0.5 {
-		t.Errorf("round10 should leave magnitudes >= 1e15 untouched, got %v", got)
+	if got := round10(1e15 + 0.5); got != 1e15 {
+		t.Errorf("round10 should keep 15 significant digits from 1e15, got %v", got)
+	}
+	if got := round10(-2.2539340290692256e25); got != -2.25393402906923e25 {
+		t.Errorf("round10 should round negatives symmetrically, got %v", got)
 	}
 }
 
