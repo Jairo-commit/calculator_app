@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"calculator_app/backend/calc"
+	"calculator_app/backend/models"
 )
 
 func Add(writer http.ResponseWriter, request *http.Request) {
@@ -37,11 +38,6 @@ func Percent(writer http.ResponseWriter, request *http.Request) {
 	handleOneOperand(writer, request, calc.Percent)
 }
 
-type operands struct {
-	FirstOperand  *float64 `json:"a"`
-	SecondOperand *float64 `json:"b"`
-}
-
 func handleTwoOperands(writer http.ResponseWriter, request *http.Request, operation func(firstOperand, secondOperand float64) (float64, error)) {
 	requestBody, decoded := readOperands(writer, request)
 	if !decoded {
@@ -64,8 +60,8 @@ func handleOneOperand(writer http.ResponseWriter, request *http.Request, operati
 	writeResult(writer, result, err)
 }
 
-func readOperands(writer http.ResponseWriter, request *http.Request) (operands, bool) {
-	var requestBody operands
+func readOperands(writer http.ResponseWriter, request *http.Request) (models.Operands, bool) {
+	var requestBody models.Operands
 	decoder := json.NewDecoder(http.MaxBytesReader(writer, request.Body, 1<<10))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&requestBody); err != nil || decoder.Decode(&struct{}{}) != io.EOF {
@@ -80,10 +76,10 @@ func readOperands(writer http.ResponseWriter, request *http.Request) (operands, 
 }
 
 func writeResult(writer http.ResponseWriter, result float64, err error) {
-	var calcError *calc.Error
+	var calculationError *models.CalculationError
 	switch {
-	case errors.As(err, &calcError):
-		writeError(writer, http.StatusBadRequest, calcError.Message)
+	case errors.As(err, &calculationError):
+		writeError(writer, http.StatusBadRequest, calculationError.Message)
 	case err != nil:
 		writeError(writer, http.StatusInternalServerError, "Internal server error")
 	default:

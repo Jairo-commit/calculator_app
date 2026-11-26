@@ -4,6 +4,8 @@ import (
 	"errors"
 	"math"
 	"testing"
+
+	"calculator_app/backend/models"
 )
 
 func TestResults(t *testing.T) {
@@ -46,8 +48,8 @@ func TestErrors(t *testing.T) {
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			_, err := testCase.got()
-			var calcErr *Error
-			if !errors.As(err, &calcErr) || calcErr.Message != testCase.want {
+			var calculationError *models.CalculationError
+			if !errors.As(err, &calculationError) || calculationError.Message != testCase.want {
 				t.Errorf("got %v; want %q", err, testCase.want)
 			}
 		})
