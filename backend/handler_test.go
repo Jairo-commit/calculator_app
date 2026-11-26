@@ -11,7 +11,7 @@ import (
 )
 
 func TestHandler(t *testing.T) {
-	boom := map[string]binaryOp{"boom": func(a, b float64) (float64, error) { return 0, errors.New("db down") }}
+	failingOperations := map[string]binaryOperation{"boom": func(_, _ float64) (float64, error) { return 0, errors.New("db down") }}
 	tests := []struct {
 		name, method, path, body string
 		status                   int
@@ -36,27 +36,27 @@ func TestHandler(t *testing.T) {
 		{"wrong method", "GET", "/api/add", ``, 405, ``},
 		{"health", "GET", "/api/health", ``, 200, `{"status":"ok"}`},
 	}
-	h := newHandler(calc.Binary, calc.Unary)
-	hBoom := newHandler(boom, nil)
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			w := httptest.NewRecorder()
-			handler := h
-			if tt.name == "internal error" {
-				handler = hBoom
+	handler := newHandler(calc.BinaryOperations, calc.UnaryOperations)
+	failingHandler := newHandler(failingOperations, nil)
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			selectedHandler := handler
+			if testCase.name == "internal error" {
+				selectedHandler = failingHandler
 			}
-			handler.ServeHTTP(w, httptest.NewRequest(tt.method, tt.path, strings.NewReader(tt.body)))
-			if w.Code != tt.status {
-				t.Fatalf("status %d, want %d", w.Code, tt.status)
+			selectedHandler.ServeHTTP(recorder, httptest.NewRequest(testCase.method, testCase.path, strings.NewReader(testCase.body)))
+			if recorder.Code != testCase.status {
+				t.Fatalf("status %d, want %d", recorder.Code, testCase.status)
 			}
-			if tt.status == http.StatusMethodNotAllowed {
+			if testCase.status == http.StatusMethodNotAllowed {
 				return
 			}
-			if got := strings.TrimSpace(w.Body.String()); got != tt.want {
-				t.Errorf("body %s, want %s", got, tt.want)
+			if got := strings.TrimSpace(recorder.Body.String()); got != testCase.want {
+				t.Errorf("body %s, want %s", got, testCase.want)
 			}
-			if ct := w.Header().Get("Content-Type"); ct != "application/json" {
-				t.Errorf("Content-Type %q", ct)
+			if contentType := recorder.Header().Get("Content-Type"); contentType != "application/json" {
+				t.Errorf("Content-Type %q", contentType)
 			}
 		})
 	}

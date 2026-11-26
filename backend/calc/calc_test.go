@@ -21,11 +21,11 @@ func TestResults(t *testing.T) {
 		{"large integers stay exact", func() (float64, error) { return Add(994399757, 0) }, 994399757},
 		{"larger integers stay exact", func() (float64, error) { return Multiply(7439835882, 1) }, 7439835882},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := tt.got()
-			if err != nil || got != tt.want || math.Signbit(got) {
-				t.Errorf("got %v, %v; want %v", got, err, tt.want)
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			got, err := testCase.got()
+			if err != nil || got != testCase.want || math.Signbit(got) {
+				t.Errorf("got %v, %v; want %v", got, err, testCase.want)
 			}
 		})
 	}
@@ -43,12 +43,12 @@ func TestErrors(t *testing.T) {
 		{"not real", func() (float64, error) { return Power(-8, 0.5) }, "Result isn’t a real number"},
 		{"too large", func() (float64, error) { return Multiply(1e200, 1e200) }, "Result is too large to display"},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_, err := tt.got()
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			_, err := testCase.got()
 			var calcErr *Error
-			if !errors.As(err, &calcErr) || calcErr.Message != tt.want {
-				t.Errorf("got %v; want %q", err, tt.want)
+			if !errors.As(err, &calcErr) || calcErr.Message != testCase.want {
+				t.Errorf("got %v; want %q", err, testCase.want)
 			}
 		})
 	}
