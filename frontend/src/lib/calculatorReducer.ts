@@ -1,36 +1,25 @@
+import type {
+  CalculatorState,
+  PendingOperation,
+} from "../models/calculatorState";
+import type { Display } from "../models/display";
+import type { KeyId } from "../models/key";
+import type { OperationRequest } from "../models/operationRequest";
 import {
   OPERATION_SYMBOLS,
   formatResult,
   isBinaryOperation,
-  type BinaryOperation,
-  type KeyId,
-  type OperationCall,
-} from "./calculator";
+} from "./operations";
 
 const MAX_DIGITS = 15;
 const MAX_DECIMALS = 10;
-
-export interface OperationRequest {
-  call: OperationCall;
-  triggerKey: KeyId;
-}
-
-export interface State {
-  text: string;
-  value: number;
-  startsNewNumber: boolean;
-  pending: { operation: BinaryOperation; value: number; text: string } | null;
-  hasSecondOperand: boolean;
-  error: string | null;
-  finishedEquation: string | null;
-}
 
 type Action =
   | { type: "key"; id: KeyId }
   | { type: "succeeded"; request: OperationRequest; result: number }
   | { type: "rejected"; message: string };
 
-export const initialState: State = {
+export const initialState: CalculatorState = {
   text: "0",
   value: 0,
   startsNewNumber: false,
@@ -40,7 +29,7 @@ export const initialState: State = {
   finishedEquation: null,
 };
 
-function typeChar(state: State, char: string): State {
+function typeChar(state: CalculatorState, char: string): CalculatorState {
   const base = state.startsNewNumber ? "" : state.text;
   if (char === "." && base.includes(".")) return state;
   const text =
@@ -63,7 +52,7 @@ function typeChar(state: State, char: string): State {
   };
 }
 
-function press(state: State, id: KeyId): State {
+function press(state: CalculatorState, id: KeyId): CalculatorState {
   if (id === "clear") return initialState;
   if (/^\d$/.test(id)) return typeChar(state, id);
   if (state.error !== null) return state;
@@ -86,7 +75,10 @@ function press(state: State, id: KeyId): State {
   };
 }
 
-export function requestFor(state: State, id: KeyId): OperationRequest | null {
+export function requestFor(
+  state: CalculatorState,
+  id: KeyId,
+): OperationRequest | null {
   if (state.error !== null) return null;
   if (id === "sqrt" || id === "percent") {
     return {
@@ -108,16 +100,16 @@ export function requestFor(state: State, id: KeyId): OperationRequest | null {
   };
 }
 
-const pendingLine = ({ text, operation }: NonNullable<State["pending"]>) =>
+const pendingLine = ({ text, operation }: PendingOperation) =>
   `${text} ${OPERATION_SYMBOLS[operation]}`;
 
 function applyResult(
-  state: State,
+  state: CalculatorState,
   request: OperationRequest,
   result: number,
-): State {
+): CalculatorState {
   const text = formatResult(result);
-  const shown: State = {
+  const shown: CalculatorState = {
     ...state,
     text,
     value: result,
@@ -147,7 +139,10 @@ function applyResult(
   return shown;
 }
 
-export function reducer(state: State, action: Action): State {
+export function reducer(
+  state: CalculatorState,
+  action: Action,
+): CalculatorState {
   switch (action.type) {
     case "key":
       return press(state, action.id);
@@ -162,13 +157,7 @@ export function reducer(state: State, action: Action): State {
   }
 }
 
-export interface Display {
-  pending: string;
-  value: string;
-  isError: boolean;
-}
-
-export const displayOf = (state: State): Display => ({
+export const displayOf = (state: CalculatorState): Display => ({
   pending: state.pending
     ? pendingLine(state.pending)
     : (state.finishedEquation ?? ""),

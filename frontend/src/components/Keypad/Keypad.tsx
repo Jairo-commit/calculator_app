@@ -1,6 +1,7 @@
 import Box from "@mui/material/Box";
 import Button, { type ButtonProps } from "@mui/material/Button";
-import { KEYPAD, type KeyId, type KeyKind } from "../../lib/calculator";
+import { KEYPAD } from "../../lib/keys";
+import type { KeyId, KeyKind } from "../../models/key";
 import { keySx, keypadSx } from "./Keypad.sx";
 
 const KEY_APPEARANCE: Record<

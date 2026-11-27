@@ -1,14 +1,14 @@
 import { useMutation } from "@tanstack/react-query";
 import { useReducer, useState } from "react";
 import { ApiValidationError, callOperation } from "../api/calculate";
-import type { KeyId } from "../lib/calculator";
 import {
   displayOf,
   initialState,
   reducer,
   requestFor,
-  type OperationRequest,
-} from "../lib/calculatorState";
+} from "../lib/calculatorReducer";
+import type { KeyId } from "../models/key";
+import type { OperationRequest } from "../models/operationRequest";
 
 export function useCalculator() {
   const [state, dispatch] = useReducer(reducer, initialState);

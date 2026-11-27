@@ -1,15 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { evaluate } from "../mocks/handlers";
-import { keyIdFor } from "./calculator";
+import type { CalculatorState } from "../models/calculatorState";
+import { keyIdFor } from "./keys";
 import {
   displayOf,
   initialState,
   reducer,
   requestFor,
-  type State,
-} from "./calculatorState";
+} from "./calculatorReducer";
 
-function run(keys: string, from: State = initialState): State {
+function run(
+  keys: string,
+  from: CalculatorState = initialState,
+): CalculatorState {
   let state = from;
   for (const token of keys.split(" ")) {
     for (const keyName of keyIdFor(token) ? [token] : [...token]) {

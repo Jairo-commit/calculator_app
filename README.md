@@ -201,7 +201,7 @@ Measured with `go test -coverpkg=./...` (backend) and Vitest's V8 coverage (fron
 Go reports statement coverage only. What is not covered, and why:
 
 - **Backend:** `main()`, which only starts the HTTP server, and the one-line `Error()` method of `CalculationError`. The math in `operations/` is at 100%.
-- **Frontend:** two guards that throw on states the code can't reach (Retry without a failed request, `=` answered without a pending operation), the snackbar's top position on phones (tests run at desktop width), and a fallback for a non-numeric theme font size. `main.tsx`, which only mounts the app, plus the test helpers and MSW mocks are excluded from the measurement.
+- **Frontend:** two guards that throw on states the code can't reach (Retry without a failed request, `=` answered without a pending operation), the snackbar's top position on phones (tests run at desktop width), and a fallback for a non-numeric theme font size. `main.tsx`, which only mounts the app, the type-only `models/` files, plus the test helpers and MSW mocks are excluded from the measurement.
 
 ## Design decisions and assumptions
 
@@ -225,7 +225,8 @@ The project began with [DESIGN.md](DESIGN.md), a one-page design for the whole a
 
 - **A pocket calculator, not an expression field.** You type a number, an operator, then another number, and each operator or `=` sends one request. There is no parser, no precedence rules and no way to type an invalid expression, so input validation comes down to the typing limits (15 digits, 10 decimals, one decimal point).
 - **Logic separated from rendering.**
-  - `lib/calculatorState.ts` is a pure reducer: given the state and a key, it returns the next state, and `requestFor` decides whether the key needs the backend. It has no React and no network, so it is unit-tested directly.
+  - `lib/calculatorReducer.ts` is a pure reducer: given the state and a key, it returns the next state, and `requestFor` decides whether the key needs the backend. It has no React and no network, so it is unit-tested directly. `lib/operations.ts` holds the operator symbols and result formatting, and `lib/keys.ts` the keypad layout and keyboard mapping.
+  - `models/` holds the shared types, one file per model, mirroring `backend/models`. Each file is imported directly; there is no barrel file.
   - `hooks/useCalculator.ts` owns the state and the side effects: it sends requests with TanStack Query's `useMutation`, turns a `400` into a message on the display and anything else into the Retry snackbar, and drops a late answer after `C`.
   - `App.tsx` wires the hook to the components, which only render their props and call back.
 - **One Axios instance** (`api/client.ts`) with the base URL and a 10-second timeout. `callOperation` turns a `400` into an `ApiValidationError`, so the hook can tell a math error from a server that can't be reached.

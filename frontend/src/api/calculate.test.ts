@@ -1,7 +1,7 @@
 import { AxiosError } from "axios";
 import { delay, http, HttpResponse } from "msw";
 import { describe, expect, it } from "vitest";
-import type { OperationCall } from "../lib/calculator";
+import type { OperationCall } from "../models/operationCall";
 import { OPERATION_URL } from "../mocks/handlers";
 import { server } from "../mocks/node";
 import { recordRequests } from "../test/requests";

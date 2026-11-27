@@ -1,5 +1,7 @@
 import { http, HttpResponse } from "msw";
-import type { Operation, OperationCall } from "../lib/calculator";
+import type { ErrorResponse, ResultResponse } from "../models/apiResponses";
+import type { Operation } from "../models/operation";
+import type { OperationCall } from "../models/operationCall";
 
 export const OPERATION_URL = "/api/:operation";
 
@@ -18,9 +20,7 @@ const OPERATIONS: Record<
   percent: (firstOperand) => firstOperand / 100,
 };
 
-export function evaluate(
-  call: OperationCall,
-): { result: number } | { error: string } {
+export function evaluate(call: OperationCall): ResultResponse | ErrorResponse {
   const secondOperand = "secondOperand" in call ? call.secondOperand : 0;
   return call.operation === "divide" && secondOperand === 0
     ? { error: DIVIDE_BY_ZERO }

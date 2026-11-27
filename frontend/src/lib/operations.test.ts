@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatResult } from "./calculator";
+import { formatResult } from "./operations";
 
 describe("formatResult", () => {
   it.each([
