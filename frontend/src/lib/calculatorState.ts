@@ -4,34 +4,32 @@ import {
   isBinaryOperation,
   type BinaryOperation,
   type KeyId,
-  type Operation,
+  type OperationCall,
 } from "./calculator";
 import { HISTORY_LIMIT, loadHistory, type HistoryEntry } from "./history";
 
 const MAX_DIGITS = 15;
 
-export interface Request {
-  operation: Operation;
-  firstOperand: number;
-  secondOperand?: number;
+export interface OperationRequest {
+  call: OperationCall;
   label: string;
-  next: KeyId;
+  triggerKey: KeyId;
 }
 
 export interface State {
   text: string;
   value: number;
-  fresh: boolean;
+  startsNewNumber: boolean;
   pending: { operation: BinaryOperation; value: number; text: string } | null;
-  ready: boolean;
+  hasSecondOperand: boolean;
   error: string | null;
-  done: string | null;
+  finishedEquation: string | null;
   history: HistoryEntry[];
 }
 
 export type Action =
   | { type: "key"; id: KeyId }
-  | { type: "succeeded"; request: Request; result: number }
+  | { type: "succeeded"; request: OperationRequest; result: number }
   | { type: "rejected"; message: string }
   | { type: "reuse"; result: number }
   | { type: "clearHistory" };
@@ -39,11 +37,11 @@ export type Action =
 const BLANK = {
   text: "0",
   value: 0,
-  fresh: false,
+  startsNewNumber: false,
   pending: null,
-  ready: false,
+  hasSecondOperand: false,
   error: null,
-  done: null,
+  finishedEquation: null,
 } as const;
 
 export const initialState = (): State => ({
@@ -52,7 +50,7 @@ export const initialState = (): State => ({
 });
 
 function typeChar(state: State, char: string): State {
-  const base = state.fresh ? "" : state.text;
+  const base = state.startsNewNumber ? "" : state.text;
   if (char === "." && base.includes(".")) return state;
   const text =
     char === "."
@@ -65,24 +63,23 @@ function typeChar(state: State, char: string): State {
     ...state,
     text,
     value: Number(text),
-    fresh: false,
-    ready: true,
+    startsNewNumber: false,
+    hasSecondOperand: true,
     error: null,
-    done: null,
+    finishedEquation: null,
   };
 }
 
 function press(state: State, id: KeyId): State {
   if (id === "clear") return { ...BLANK, history: state.history };
-  if (id === "clearEntry") {
-    return { ...state, ...BLANK, pending: state.pending };
-  }
   if (/^\d$/.test(id)) return typeChar(state, id);
   if (state.error !== null) return state;
   if (id === "decimal") return typeChar(state, ".");
   if (id === "backspace") {
     const text = state.text.slice(0, -1) || "0";
-    return state.fresh ? state : { ...state, text, value: Number(text) };
+    return state.startsNewNumber
+      ? state
+      : { ...state, text, value: Number(text) };
   }
   if (!isBinaryOperation(id)) return state;
   if (state.pending)
@@ -90,75 +87,75 @@ function press(state: State, id: KeyId): State {
   return {
     ...state,
     pending: { operation: id, value: state.value, text: state.text },
-    fresh: true,
-    ready: false,
-    done: null,
+    startsNewNumber: true,
+    hasSecondOperand: false,
+    finishedEquation: null,
   };
 }
 
-export function requestFor(state: State, id: KeyId): Request | null {
+export function requestFor(state: State, id: KeyId): OperationRequest | null {
   if (state.error !== null) return null;
   if (id === "sqrt") {
     return {
-      operation: id,
-      firstOperand: state.value,
+      call: { operation: id, firstOperand: state.value },
       label: `√${state.text}`,
-      next: id,
+      triggerKey: id,
     };
   }
   if (id === "percent") {
     return {
-      operation: id,
-      firstOperand: state.value,
+      call: { operation: id, firstOperand: state.value },
       label: `${state.text}%`,
-      next: id,
+      triggerKey: id,
     };
   }
   if (
     !(isBinaryOperation(id) || id === "equals") ||
     !state.pending ||
-    !state.ready
+    !state.hasSecondOperand
   ) {
     return null;
   }
   const { operation, value, text } = state.pending;
   return {
-    operation,
-    firstOperand: value,
-    secondOperand: state.value,
+    call: { operation, firstOperand: value, secondOperand: state.value },
     label: `${text} ${OPERATION_SYMBOLS[operation]} ${state.text}`,
-    next: id,
+    triggerKey: id,
   };
 }
 
-function applyResult(state: State, request: Request, result: number): State {
+function applyResult(
+  state: State,
+  request: OperationRequest,
+  result: number,
+): State {
   const text = formatResult(result);
   const shown: State = {
     ...state,
     text,
     value: result,
-    fresh: true,
-    ready: true,
+    startsNewNumber: true,
+    hasSecondOperand: true,
     error: null,
-    done: null,
+    finishedEquation: null,
     history: [{ expr: request.label, result }, ...state.history].slice(
       0,
       HISTORY_LIMIT,
     ),
   };
-  if (request.next === "equals") {
+  if (request.triggerKey === "equals") {
     return {
       ...shown,
       pending: null,
-      ready: false,
-      done: `${request.label} =`,
+      hasSecondOperand: false,
+      finishedEquation: `${request.label} =`,
     };
   }
-  if (isBinaryOperation(request.next)) {
+  if (isBinaryOperation(request.triggerKey)) {
     return {
       ...shown,
-      pending: { operation: request.next, value: result, text },
-      ready: false,
+      pending: { operation: request.triggerKey, value: result, text },
+      hasSecondOperand: false,
     };
   }
   return shown;
@@ -175,17 +172,17 @@ export function reducer(state: State, action: Action): State {
         ...BLANK,
         history: state.history,
         error: action.message,
-        fresh: true,
+        startsNewNumber: true,
       };
     case "reuse":
       return {
         ...state,
         text: formatResult(action.result),
         value: action.result,
-        fresh: true,
-        ready: state.pending !== null,
+        startsNewNumber: true,
+        hasSecondOperand: state.pending !== null,
         error: null,
-        done: null,
+        finishedEquation: null,
       };
     case "clearHistory":
       return { ...state, history: [] };
@@ -201,7 +198,7 @@ export interface Display {
 export const displayOf = (state: State): Display => ({
   pending: state.pending
     ? `${state.pending.text} ${OPERATION_SYMBOLS[state.pending.operation]}`
-    : (state.done ?? ""),
+    : (state.finishedEquation ?? ""),
   value: state.error ?? state.text,
   isError: state.error !== null,
 });

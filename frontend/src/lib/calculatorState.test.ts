@@ -19,11 +19,7 @@ function run(keys: string, from: State = initialState()): State {
         state = reducer(state, { type: "key", id });
         continue;
       }
-      const answer = evaluate(
-        request.operation,
-        request.firstOperand,
-        request.secondOperand,
-      );
+      const answer = evaluate(request.call);
       state = reducer(
         state,
         "error" in answer
@@ -50,8 +46,6 @@ describe("calculator state", () => {
     ["2 + 9 r =", ["5", "2 + 3 ="]],
     ["2 + 3 = 7", ["7", ""]],
     ["2 + 3 = * 4 =", ["20", "5 × 4 ="]],
-    ["5 + 3 Delete", ["0", "5 +"]],
-    ["5 + 3 Delete 4 =", ["9", "5 + 4 ="]],
     ["123 Backspace", ["12", ""]],
     ["1 Backspace Backspace", ["0", ""]],
     ["2 + 3 = Backspace", ["5", "2 + 3 ="]],
@@ -76,7 +70,7 @@ describe("calculator state", () => {
     ]);
   });
 
-  it("shows a 400 message, drops the operator and recovers only by digit, C or CE", () => {
+  it("shows a 400 message, drops the operator and recovers only by digit or C", () => {
     const failed = run("1 / 0 =");
 
     expect(displayOf(failed)).toEqual({
@@ -89,7 +83,6 @@ describe("calculator state", () => {
       value: "5",
       isError: false,
     });
-    expect(run("Delete", failed).error).toBeNull();
     expect(run("Escape", failed).error).toBeNull();
   });
 

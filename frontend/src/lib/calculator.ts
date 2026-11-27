@@ -2,6 +2,13 @@ export type BinaryOperation =
   "add" | "subtract" | "multiply" | "divide" | "power";
 export type UnaryOperation = "sqrt" | "percent";
 export type Operation = BinaryOperation | UnaryOperation;
+export type OperationCall =
+  | { operation: UnaryOperation; firstOperand: number }
+  | {
+      operation: BinaryOperation;
+      firstOperand: number;
+      secondOperand: number;
+    };
 export type KeyId =
   | "0"
   | "1"
@@ -17,7 +24,6 @@ export type KeyId =
   | Operation
   | "equals"
   | "clear"
-  | "clearEntry"
   | "backspace";
 
 export const OPERATION_SYMBOLS: Record<BinaryOperation, string> = {
@@ -58,8 +64,7 @@ const key = (
 const digit = (digitId: KeyId) => key(digitId, digitId, "num");
 
 export const KEYPAD: readonly KeyDef[] = [
-  key("clear", "C", "clear", "Clear"),
-  key("clearEntry", "CE", "util", "Clear entry"),
+  key("clear", "C", "clear", "Clear", { wide: true }),
   key("backspace", "⌫", "util", "Backspace"),
   key("divide", "÷", "op", "Divide"),
   key("sqrt", "√", "fn", "Square root"),
@@ -95,7 +100,6 @@ const PHYSICAL_KEYS: Record<string, KeyId> = {
   Enter: "equals",
   "=": "equals",
   Backspace: "backspace",
-  Delete: "clearEntry",
   Escape: "clear",
 };
 

@@ -1,5 +1,6 @@
 import { AxiosError } from "axios";
 import { describe, expect, it } from "vitest";
+import type { OperationCall } from "../lib/calculator";
 import { ApiValidationError, callOperation } from "./calculate";
 import { bodyOf, fail, reply, stubBackend } from "../test/backend";
 
@@ -8,7 +9,7 @@ describe("callOperation", () => {
     const adapter = stubBackend((config) => reply(config, 200, { result: 5 }));
 
     await expect(
-      callOperation("add", { firstOperand: 2, secondOperand: 3 }),
+      callOperation({ operation: "add", firstOperand: 2, secondOperand: 3 }),
     ).resolves.toBe(5);
 
     const requestConfig = adapter.mock.calls[0][0];
@@ -23,12 +24,19 @@ describe("callOperation", () => {
     });
   });
 
+  it("does not compile a two-number operation without its second operand", () => {
+    // @ts-expect-error secondOperand is required for add
+    const call: OperationCall = { operation: "add", firstOperand: 2 };
+
+    expect(call.operation).toBe("add");
+  });
+
   it("maps a 400 to ApiValidationError with the server message", async () => {
     stubBackend((config) => reply(config, 400, { error: "Nope" }));
 
-    await expect(callOperation("sqrt", { firstOperand: -1 })).rejects.toThrow(
-      new ApiValidationError("Nope"),
-    );
+    await expect(
+      callOperation({ operation: "sqrt", firstOperand: -1 }),
+    ).rejects.toThrow(new ApiValidationError("Nope"));
   });
 
   it.each([
@@ -43,9 +51,10 @@ describe("callOperation", () => {
   ])("lets %s through as a non-validation error", async (_name, adapter) => {
     stubBackend(adapter);
 
-    const error = await callOperation("sqrt", { firstOperand: 1 }).catch(
-      (caught) => caught,
-    );
+    const error = await callOperation({
+      operation: "sqrt",
+      firstOperand: 1,
+    }).catch((caught) => caught);
 
     expect(error).toBeInstanceOf(AxiosError);
     expect(error).not.toBeInstanceOf(ApiValidationError);

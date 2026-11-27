@@ -5,7 +5,7 @@ import {
 } from "axios";
 import { vi } from "vitest";
 import { api } from "../api/calculate";
-import type { Operation } from "../lib/calculator";
+import type { Operation, OperationCall } from "../lib/calculator";
 
 type Config = InternalAxiosRequestConfig;
 export type Adapter = (config: Config) => Promise<AxiosResponse>;
@@ -26,13 +26,12 @@ const OPERATIONS: Record<
 };
 
 export function evaluate(
-  operation: Operation,
-  firstOperand: number,
-  secondOperand = 0,
+  call: OperationCall,
 ): { result: number } | { error: string } {
-  return operation === "divide" && secondOperand === 0
+  const secondOperand = "secondOperand" in call ? call.secondOperand : 0;
+  return call.operation === "divide" && secondOperand === 0
     ? { error: DIVIDE_BY_ZERO }
-    : { result: OPERATIONS[operation](firstOperand, secondOperand) };
+    : { result: OPERATIONS[call.operation](call.firstOperand, secondOperand) };
 }
 
 export function reply(
@@ -62,15 +61,10 @@ export const fail =
 export const bodyOf = (config: Config): unknown => JSON.parse(config.data);
 
 export const fakeBackend: Adapter = (config) => {
-  const { firstOperand, secondOperand } = bodyOf(config) as {
-    firstOperand: number;
-    secondOperand?: number;
-  };
-  const answer = evaluate(
-    (config.url ?? "").slice(1) as Operation,
-    firstOperand,
-    secondOperand,
-  );
+  const answer = evaluate({
+    ...(bodyOf(config) as object),
+    operation: (config.url ?? "").slice(1),
+  } as OperationCall);
   return reply(config, "error" in answer ? 400 : 200, answer);
 };
 

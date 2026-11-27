@@ -7,7 +7,7 @@ import {
   initialState,
   reducer,
   requestFor,
-  type Request,
+  type OperationRequest,
 } from "../lib/calculatorState";
 import { saveHistory } from "../lib/history";
 
@@ -15,14 +15,12 @@ export function useCalculator() {
   const [state, dispatch] = useReducer(reducer, undefined, initialState);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const { mutate, reset, isPending, variables } = useMutation({
-    mutationFn: ({ operation, firstOperand, secondOperand }: Request) =>
-      callOperation(operation, { firstOperand, secondOperand }),
-    retry: false,
+    mutationFn: ({ call }: OperationRequest) => callOperation(call),
   });
 
   useEffect(() => saveHistory(state.history), [state.history]);
 
-  const send = (request: Request) =>
+  const send = (request: OperationRequest) =>
     mutate(request, {
       onSuccess: (result) => dispatch({ type: "succeeded", request, result }),
       onError: (error) =>
@@ -53,8 +51,11 @@ export function useCalculator() {
     snackbarOpen,
     dismiss: () => setSnackbarOpen(false),
     retry: () => {
+      if (!variables) {
+        throw new Error("Retry pressed without a failed request");
+      }
       setSnackbarOpen(false);
-      if (variables) send(variables);
+      send(variables);
     },
   };
 }

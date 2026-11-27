@@ -1,14 +1,14 @@
 import axios from "axios";
-import type { Operation } from "../lib/calculator";
+import type { OperationCall } from "../lib/calculator";
 
 export class ApiValidationError extends Error {}
 
 export const api = axios.create({ baseURL: "/api", timeout: 10_000 });
 
-export async function callOperation(
-  operation: Operation,
-  operands: { firstOperand: number; secondOperand?: number },
-): Promise<number> {
+export async function callOperation({
+  operation,
+  ...operands
+}: OperationCall): Promise<number> {
   try {
     const { data } = await api.post<{ result: number }>(
       `/${operation}`,
