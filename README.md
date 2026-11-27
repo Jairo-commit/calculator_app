@@ -84,7 +84,12 @@ Everything runs in Docker, so nothing needs to be installed locally.
 docker compose run --rm --no-deps backend gofmt -l .      # must print nothing
 docker compose run --rm --no-deps backend go vet ./...
 docker compose run --rm --no-deps backend go test -count=1 ./...
+
+# coverage: per-function table in the terminal, HTML report in backend/coverage.html
+docker compose run --rm --no-deps backend sh -c 'go test -count=1 -coverpkg=./... -coverprofile=coverage.out ./... && go tool cover -func=coverage.out && go tool cover -html=coverage.out -o coverage.html'
 ```
+
+`-coverpkg=./...` counts every test toward every package. Without it the HTTP handlers would show 0%, because they are tested through the routes in `main_test.go`, which lives in another package.
 
 ## Frontend
 
@@ -179,4 +184,60 @@ docker compose run --rm --no-deps frontend npm test
 docker compose run --rm --no-deps frontend npm run lint
 docker compose run --rm --no-deps frontend npm run format:check   # or: npm run format
 docker compose run --rm --no-deps frontend npm run build          # tsc + vite build
+docker compose run --rm --no-deps frontend npm run coverage       # table in the terminal, HTML report in frontend/coverage/index.html
 ```
+
+If `npm run coverage` says `@vitest/coverage-v8` is missing, rebuild the image so it installs the new dev dependency: `docker compose build frontend`.
+
+## Test coverage
+
+Measured with `go test -coverpkg=./...` (backend) and Vitest's V8 coverage (frontend), using the commands above.
+
+| Layer | Statements | Branches | Functions | Lines |
+|---|---|---|---|---|
+| Backend (Go) | 96.1% | — | — | — |
+| Frontend (React) | 97.4% | 93.8% | 100% | 98.5% |
+
+Go reports statement coverage only. What is not covered, and why:
+
+- **Backend:** `main()`, which only starts the HTTP server, and the one-line `Error()` method of `CalculationError`. The math in `operations/` is at 100%.
+- **Frontend:** two guards that throw on states the code can't reach (Retry without a failed request, `=` answered without a pending operation), the snackbar's top position on phones (tests run at desktop width), and a fallback for a non-numeric theme font size. `main.tsx`, which only mounts the app, plus the test helpers and MSW mocks are excluded from the measurement.
+
+## Design decisions and assumptions
+
+### Architecture
+
+- **Two services.** A Go REST API and a React single-page app, each in its own Docker container, started together with `docker compose`. The frontend calls the backend through the Vite proxy (`/api` → `http://backend:8080`), so the browser sees one origin and no CORS setup is needed.
+- **The backend does all the math, the frontend none.** Every result, rounding rule and limit lives in `backend/operations/`. The frontend only collects keys, sends one request per operation and shows the answer, so the rules exist in exactly one place.
+- **Go standard library only.** `net/http` with Go 1.22+ method-and-path routing (`POST /api/add`) covers everything a seven-endpoint API needs, with no dependencies to keep up to date.
+
+### Backend API
+
+- **One endpoint per operation** (`/api/add`, `/api/sqrt`, …) instead of a single `/api/calculate` with an operator field. Each handler is a one-liner, each route says what it does, and two-operand and one-operand operations validate their own inputs. An earlier version evaluated whole expressions; it was dropped as more code than the assignment needs.
+- **Strict input.** Bodies are JSON `{ "firstOperand": …, "secondOperand": … }`, limited to 1 KiB. Unknown fields, malformed JSON or a trailing second object answer "Invalid request body", and a missing or `null` operand answers "Enter a number". Anything the user can fix is a `400 {"error": "…"}` with a message written for the screen; an unexpected failure is a `500` that hides the details.
+- **Exact numbers or an error, never a wrong number.** Values are 64-bit floats, which hold about 15–17 significant digits. So every result is rounded to 10 decimals and 15 significant digits, and must lie between −999,999,999,999,999 and 999,999,999,999,999. Outside that, the API answers "Result is too large to display" or "Result is too small to display" instead of a number whose last digits are wrong. Rounding also removes floating-point noise (`0.1 + 0.2` gives `0.3`), and `−0` becomes `0`.
+
+### Frontend
+
+- **A pocket calculator, not an expression field.** You type a number, an operator, then another number, and each operator or `=` sends one request. There is no parser, no precedence rules and no way to type an invalid expression, so input validation comes down to the typing limits (15 digits, 10 decimals, one decimal point).
+- **Logic separated from rendering.**
+  - `lib/calculatorState.ts` is a pure reducer: given the state and a key, it returns the next state, and `requestFor` decides whether the key needs the backend. It has no React and no network, so it is unit-tested directly.
+  - `hooks/useCalculator.ts` owns the state and the side effects: it sends requests with TanStack Query's `useMutation`, turns a `400` into a message on the display and anything else into the Retry snackbar, and drops a late answer after `C`.
+  - `App.tsx` wires the hook to the components, which only render their props and call back.
+- **One Axios instance** (`api/client.ts`) with the base URL and a 10-second timeout. `callOperation` turns a `400` into an `ApiValidationError`, so the hook can tell a math error from a server that can't be reached.
+- **TanStack Query for request state.** It tracks the pending request (keys are disabled meanwhile), keeps the last request for Retry, and `reset()` discards an answer that arrives after `C`.
+- **MUI with one custom theme.** `theme.ts` holds every color, font, size and component default (key colors, the `keypad` button size, the monospace display styles), and each component's `.sx.ts` file holds only layout. Restyling the app means editing one file.
+- **Responsive by default.** A single centered column up to 560px wide, bigger keys on phones, and a result that shrinks its font to stay on one line.
+
+### Testing
+
+- **Backend:** table-driven unit tests for every operation and limit, plus HTTP tests that send real requests through the router with `httptest`.
+- **Frontend:** the reducer is tested on its own, and the whole app is tested as a user would use it (Testing Library clicks and keyboard input). The backend is replaced by [MSW](https://mswjs.io) at the network level, so the real Axios and TanStack Query code runs in the tests.
+
+### Assumptions
+
+- **Immediate execution**, like a pocket calculator: `2 + 3 × 4 =` gives `20`, not `14`.
+- **`%` divides the number on screen by 100**, so `80 × 15 % =` gives `12`.
+- **No minus key for typing a negative number.** Negative numbers come from results, for example `0 − 5 =`.
+- **No history, accounts or saved state.** Every calculation stands alone, and reloading the page starts from `0`.
+- **Docker runs development servers** (`go run .` and Vite with hot reload), which suits this exercise. A production deployment would build a static frontend and a compiled Go binary instead.
