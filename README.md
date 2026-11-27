@@ -1,6 +1,6 @@
 # Calculator App
 
-An old-style pocket calculator with one backend endpoint per operation. Full-stack practice project: **React (Vite + TypeScript)** frontend and **Go (net/http)** backend, both running in Docker. Nothing needs to be installed locally except Docker.
+An old-style pocket calculator with one backend endpoint per operation. Full-stack practice project: **React (Vite + TypeScript)** frontend and **Go (net/http)** backend, both running in Docker. Nothing needs to be installed locally except Docker. It started from the design in [DESIGN.md](DESIGN.md); see [Design decisions and assumptions](#design-decisions-and-assumptions).
 
 ## Run
 
@@ -204,6 +204,10 @@ Go reports statement coverage only. What is not covered, and why:
 - **Frontend:** two guards that throw on states the code can't reach (Retry without a failed request, `=` answered without a pending operation), the snackbar's top position on phones (tests run at desktop width), and a fallback for a non-numeric theme font size. `main.tsx`, which only mounts the app, plus the test helpers and MSW mocks are excluded from the measurement.
 
 ## Design decisions and assumptions
+
+### Starting point: DESIGN.md
+
+The project began with [DESIGN.md](DESIGN.md), a one-page design for the whole app: how an old pocket calculator should behave, the keypad, the error rules, one REST endpoint per operation, and a deliberately small code layout (`main.go` with one route per line, `handlers/`, `models/` and `operations/` in Go; `App.tsx`, `components/`, `hooks/`, `lib/` and `api/` in React). Everything else was built on top of that structure and then refined over many iterations, polishing details with AI tooling (Claude Code with my own skills and plugins). The sections below record the decisions made along the way; where they go beyond DESIGN.md, such as the 15-digit limits, the README is the current reference.
 
 ### Architecture
 
