@@ -40,9 +40,9 @@ describe("callOperation", () => {
 
   it("does not compile a two-number operation without its second operand", () => {
     // @ts-expect-error secondOperand is required for add
-    const call: OperationCall = { operation: "add", firstOperand: 2 };
+    const operationCall: OperationCall = { operation: "add", firstOperand: 2 };
 
-    expect(call.operation).toBe("add");
+    expect(operationCall.operation).toBe("add");
   });
 
   it("maps a 400 to ApiValidationError with the server message", async () => {

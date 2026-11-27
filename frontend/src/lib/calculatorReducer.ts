@@ -14,7 +14,7 @@ import {
 const MAX_DIGITS = 15;
 const MAX_DECIMALS = 10;
 
-type Action =
+type CalculatorAction =
   | { type: "key"; id: KeyId }
   | { type: "succeeded"; request: OperationRequest; result: number }
   | { type: "rejected"; message: string };
@@ -29,22 +29,25 @@ export const initialState: CalculatorState = {
   finishedEquation: null,
 };
 
-function typeChar(state: CalculatorState, char: string): CalculatorState {
-  const base = state.startsNewNumber ? "" : state.text;
-  if (char === "." && base.includes(".")) return state;
-  const text =
-    char === "."
-      ? `${base || "0"}.`
-      : base === "" || base === "0"
-        ? char
-        : base + char;
-  const decimals = text.split(".")[1] ?? "";
-  if (text.replace(".", "").length > MAX_DIGITS) return state;
-  if (decimals.length > MAX_DECIMALS) return state;
+function typeCharacter(
+  state: CalculatorState,
+  character: string,
+): CalculatorState {
+  const typedSoFar = state.startsNewNumber ? "" : state.text;
+  if (character === "." && typedSoFar.includes(".")) return state;
+  const nextText =
+    character === "."
+      ? `${typedSoFar || "0"}.`
+      : typedSoFar === "" || typedSoFar === "0"
+        ? character
+        : typedSoFar + character;
+  const decimalDigits = nextText.split(".")[1] ?? "";
+  if (nextText.replace(".", "").length > MAX_DIGITS) return state;
+  if (decimalDigits.length > MAX_DECIMALS) return state;
   return {
     ...state,
-    text,
-    value: Number(text),
+    text: nextText,
+    value: Number(nextText),
     startsNewNumber: false,
     hasSecondOperand: true,
     error: null,
@@ -52,23 +55,23 @@ function typeChar(state: CalculatorState, char: string): CalculatorState {
   };
 }
 
-function press(state: CalculatorState, id: KeyId): CalculatorState {
-  if (id === "clear") return initialState;
-  if (/^\d$/.test(id)) return typeChar(state, id);
+function pressLocalKey(state: CalculatorState, keyId: KeyId): CalculatorState {
+  if (keyId === "clear") return initialState;
+  if (/^\d$/.test(keyId)) return typeCharacter(state, keyId);
   if (state.error !== null) return state;
-  if (id === "decimal") return typeChar(state, ".");
-  if (id === "backspace") {
-    const text = state.text.slice(0, -1) || "0";
+  if (keyId === "decimal") return typeCharacter(state, ".");
+  if (keyId === "backspace") {
+    const shortenedText = state.text.slice(0, -1) || "0";
     return state.startsNewNumber
       ? state
-      : { ...state, text, value: Number(text) };
+      : { ...state, text: shortenedText, value: Number(shortenedText) };
   }
-  if (!isBinaryOperation(id)) return state;
+  if (!isBinaryOperation(keyId)) return state;
   if (state.pending)
-    return { ...state, pending: { ...state.pending, operation: id } };
+    return { ...state, pending: { ...state.pending, operation: keyId } };
   return {
     ...state,
-    pending: { operation: id, value: state.value, text: state.text },
+    pending: { operation: keyId, value: state.value, text: state.text },
     startsNewNumber: true,
     hasSecondOperand: false,
     finishedEquation: null,
@@ -77,30 +80,34 @@ function press(state: CalculatorState, id: KeyId): CalculatorState {
 
 export function requestFor(
   state: CalculatorState,
-  id: KeyId,
+  keyId: KeyId,
 ): OperationRequest | null {
   if (state.error !== null) return null;
-  if (id === "sqrt" || id === "percent") {
+  if (keyId === "sqrt" || keyId === "percent") {
     return {
-      call: { operation: id, firstOperand: state.value },
-      triggerKey: id,
+      operationCall: { operation: keyId, firstOperand: state.value },
+      triggerKey: keyId,
     };
   }
   if (
-    !(isBinaryOperation(id) || id === "equals") ||
+    !(isBinaryOperation(keyId) || keyId === "equals") ||
     !state.pending ||
     !state.hasSecondOperand
   ) {
     return null;
   }
-  const { operation, value } = state.pending;
+  const { operation: pendingOperation, value: firstOperand } = state.pending;
   return {
-    call: { operation, firstOperand: value, secondOperand: state.value },
-    triggerKey: id,
+    operationCall: {
+      operation: pendingOperation,
+      firstOperand,
+      secondOperand: state.value,
+    },
+    triggerKey: keyId,
   };
 }
 
-const pendingLine = ({ text, operation }: PendingOperation) =>
+const pendingOperationLine = ({ text, operation }: PendingOperation) =>
   `${text} ${OPERATION_SYMBOLS[operation]}`;
 
 function applyResult(
@@ -108,10 +115,10 @@ function applyResult(
   request: OperationRequest,
   result: number,
 ): CalculatorState {
-  const text = formatResult(result);
-  const shown: CalculatorState = {
+  const resultText = formatResult(result);
+  const stateShowingResult: CalculatorState = {
     ...state,
-    text,
+    text: resultText,
     value: result,
     startsNewNumber: true,
     hasSecondOperand: true,
@@ -123,29 +130,33 @@ function applyResult(
       throw new Error("Equals answered without a pending operation");
     }
     return {
-      ...shown,
+      ...stateShowingResult,
       pending: null,
       hasSecondOperand: false,
-      finishedEquation: `${pendingLine(state.pending)} ${state.text} =`,
+      finishedEquation: `${pendingOperationLine(state.pending)} ${state.text} =`,
     };
   }
   if (isBinaryOperation(request.triggerKey)) {
     return {
-      ...shown,
-      pending: { operation: request.triggerKey, value: result, text },
+      ...stateShowingResult,
+      pending: {
+        operation: request.triggerKey,
+        value: result,
+        text: resultText,
+      },
       hasSecondOperand: false,
     };
   }
-  return shown;
+  return stateShowingResult;
 }
 
 export function reducer(
   state: CalculatorState,
-  action: Action,
+  action: CalculatorAction,
 ): CalculatorState {
   switch (action.type) {
     case "key":
-      return press(state, action.id);
+      return pressLocalKey(state, action.id);
     case "succeeded":
       return applyResult(state, action.request, action.result);
     case "rejected":
@@ -159,7 +170,7 @@ export function reducer(
 
 export const displayOf = (state: CalculatorState): Display => ({
   pending: state.pending
-    ? pendingLine(state.pending)
+    ? pendingOperationLine(state.pending)
     : (state.finishedEquation ?? ""),
   value: state.error ?? state.text,
   isError: state.error !== null,

@@ -20,11 +20,19 @@ const OPERATIONS: Record<
   percent: (firstOperand) => firstOperand / 100,
 };
 
-export function evaluate(call: OperationCall): ResultResponse | ErrorResponse {
-  const secondOperand = "secondOperand" in call ? call.secondOperand : 0;
-  return call.operation === "divide" && secondOperand === 0
+export function evaluate(
+  operationCall: OperationCall,
+): ResultResponse | ErrorResponse {
+  const secondOperand =
+    "secondOperand" in operationCall ? operationCall.secondOperand : 0;
+  return operationCall.operation === "divide" && secondOperand === 0
     ? { error: DIVIDE_BY_ZERO }
-    : { result: OPERATIONS[call.operation](call.firstOperand, secondOperand) };
+    : {
+        result: OPERATIONS[operationCall.operation](
+          operationCall.firstOperand,
+          secondOperand,
+        ),
+      };
 }
 
 export const handlers = [

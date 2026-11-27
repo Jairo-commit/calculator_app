@@ -22,7 +22,7 @@ function run(
         state = reducer(state, { type: "key", id });
         continue;
       }
-      const answer = evaluate(request.call);
+      const answer = evaluate(request.operationCall);
       state = reducer(
         state,
         "error" in answer
