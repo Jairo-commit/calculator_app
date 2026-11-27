@@ -10,7 +10,8 @@ import {
   outputSx,
   panelSx,
   progressSlotSx,
-  valueSx,
+  errorValueSx,
+  fittedValueSx,
 } from "./CalculatorPanel.sx";
 
 interface CalculatorPanelProps {
@@ -50,7 +51,9 @@ export default function CalculatorPanel({
         <Typography
           variant={display.isError ? "displayError" : "display"}
           data-testid="value"
-          sx={valueSx}
+          sx={
+            display.isError ? errorValueSx : fittedValueSx(display.value.length)
+          }
         >
           {display.value}
         </Typography>
@@ -58,7 +61,7 @@ export default function CalculatorPanel({
       <Box sx={progressSlotSx}>
         {loading && <LinearProgress aria-label="Calculating" />}
       </Box>
-      <Keypad loading={loading} onPress={onPress} />
+      <Keypad disabled={loading} onPress={onPress} />
     </Paper>
   );
 }

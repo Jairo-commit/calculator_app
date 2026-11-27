@@ -85,7 +85,11 @@ const { palette } = baseTheme;
 
 export const theme = createTheme(baseTheme, {
   typography: {
-    display: monoBlock(48, palette.text.primary),
+    display: {
+      ...monoBlock(48, palette.text.primary),
+      overflowWrap: "normal",
+      whiteSpace: "nowrap",
+    },
     displayError: monoBlock(24, palette.error.main),
     pendingLine: { ...monoBlock(14, palette.text.secondary), minHeight: 20 },
   },

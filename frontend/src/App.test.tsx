@@ -1,3 +1,4 @@
+import { ThemeProvider } from "@mui/material/styles";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -8,12 +9,15 @@ import { apiClient } from "./api/client";
 import { DIVIDE_BY_ZERO, OPERATION_URL } from "./mocks/handlers";
 import { server } from "./mocks/node";
 import { recordRequests } from "./test/requests";
+import { theme } from "./theme";
 
 function renderApp() {
   const user = userEvent.setup();
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <App />
+      <ThemeProvider theme={theme}>
+        <App />
+      </ThemeProvider>
     </QueryClientProvider>,
   );
   const panel = screen.getByRole("group", { name: "Calculator" });
@@ -160,6 +164,19 @@ describe("keypad and keyboard", () => {
   });
 });
 
+describe("results the backend sends in exponent form", () => {
+  it("shows a tiny result as plain digits", async () => {
+    server.use(
+      http.post(OPERATION_URL, () => HttpResponse.json({ result: 1e-10 })),
+    );
+    const app = renderApp();
+
+    await app.click("2", "Plus", "3", "Equals");
+
+    await waitFor(() => shows(app.value(), "0.0000000001"));
+  });
+});
+
 describe("errors", () => {
   it("shows a 400 error message on the display instead of the snackbar", async () => {
     const app = renderApp();
@@ -247,30 +264,42 @@ describe("errors", () => {
 });
 
 describe("while a request is pending", () => {
-  it("ignores digits", async () => {
+  it("disables every key", async () => {
     holdResponses();
     const app = renderApp();
+
     await app.click("2", "Plus", "3", "Equals");
 
-    await app.click("9");
+    for (const key of within(app.panel).getAllByRole("button")) {
+      expect(key).toBeDisabled();
+    }
+  });
+
+  it("keeps showing every key's label", async () => {
+    holdResponses();
+    const app = renderApp();
+
+    await app.click("2", "Plus", "3", "Equals");
+
+    expect(
+      within(app.panel).getByRole("button", { name: "Equals" }),
+    ).toHaveTextContent(/^=$/);
+  });
+
+  it("ignores digits typed on the keyboard", async () => {
+    holdResponses();
+    const app = renderApp();
+    await app.user.keyboard("2+3{Enter}");
+
+    await app.user.keyboard("9");
 
     shows(app.value(), "3");
   });
 
-  it("disables equals", async () => {
-    holdResponses();
-    const app = renderApp();
-
-    await app.click("2", "Plus", "3", "Equals");
-
-    expect(screen.getByRole("button", { name: "Equals" })).toBeDisabled();
-  });
-
-  it("discards an answer that arrives after C", async () => {
+  it("discards an answer that arrives after Escape", async () => {
     const answer = holdResponses();
     const app = renderApp();
-    await app.click("2", "Plus", "3", "Equals");
-    await app.click("Clear");
+    await app.user.keyboard("2+3{Enter}{Escape}");
 
     await act(answer);
     await act(() => new Promise((resolve) => setTimeout(resolve, 50)));

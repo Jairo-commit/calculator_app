@@ -19,14 +19,19 @@ func TestResults(t *testing.T) {
 		{"power", func() (float64, error) { return Power(2, 10) }, 1024},
 		{"sqrt", func() (float64, error) { return Sqrt(9) }, 3},
 		{"percent", func() (float64, error) { return Percent(15) }, 0.15},
-		{"values above 1e15 keep their fraction", func() (float64, error) { return Add(1e15, 0.5) }, 1e15 + 0.5},
+		{"keeps a fraction that fits in 15 digits", func() (float64, error) { return Add(1e13, 0.5) }, 10000000000000.5},
 		{"integers above 1e9 stay exact", func() (float64, error) { return Multiply(7439835882, 1) }, 7439835882},
 		{"rounds to 10 decimals", func() (float64, error) { return Divide(1, 3) }, 0.3333333333},
+		{"rounds 0.00000000005 up to the smallest result above zero", func() (float64, error) { return Add(5e-11, 0) }, 1e-10},
+		{"reaches the largest result exactly", func() (float64, error) { return Add(999999999999998, 1) }, 999999999999999},
+		{"reaches the most negative result exactly", func() (float64, error) { return Subtract(-999999999999998, 1) }, -999999999999999},
+		{"rounds to 15 significant digits", func() (float64, error) { return Divide(123456789, 7) }, 17636684.1428571},
+		{"keeps 10 decimals when they fit in 15 digits", func() (float64, error) { return Divide(10, 3) }, 3.3333333333},
 	}
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			got, err := testCase.got()
-			if err != nil || got != testCase.want || math.Signbit(got) {
+			if err != nil || got != testCase.want || (got == 0 && math.Signbit(got)) {
 				t.Errorf("got %v, %v; want %v", got, err, testCase.want)
 			}
 		})
@@ -44,6 +49,14 @@ func TestErrors(t *testing.T) {
 		{"zero to negative power", func() (float64, error) { return Power(0, -1) }, "Can’t raise 0 to a negative power"},
 		{"not real", func() (float64, error) { return Power(-8, 0.5) }, "Result isn’t a real number"},
 		{"too large", func() (float64, error) { return Multiply(1e200, 1e200) }, "Result is too large to display"},
+		{"too large just past the float64 limit", func() (float64, error) { return Power(10, 309) }, "Result is too large to display"},
+		{"too large past 15 digits", func() (float64, error) { return Add(999999999999999, 1) }, "Result is too large to display"},
+		{"too large when the exact result needs 16 digits", func() (float64, error) { return Multiply(99999999, 99999999) }, "Result is too large to display"},
+		{"too large below -999999999999999", func() (float64, error) { return Subtract(-999999999999999, 1) }, "Result is too large to display"},
+		{"too large once rounding reaches 16 digits", func() (float64, error) { return Add(999999999999999, 0.6) }, "Result is too large to display"},
+		{"too small to show in 10 decimals", func() (float64, error) { return Add(4e-11, 0) }, "Result is too small to display"},
+		{"too small from a percent", func() (float64, error) { return Percent(0.000000001) }, "Result is too small to display"},
+		{"too small negative", func() (float64, error) { return Divide(-1, 1e11) }, "Result is too small to display"},
 	}
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {

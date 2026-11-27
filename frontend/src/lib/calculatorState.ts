@@ -8,6 +8,7 @@ import {
 } from "./calculator";
 
 const MAX_DIGITS = 15;
+const MAX_DECIMALS = 10;
 
 export interface OperationRequest {
   call: OperationCall;
@@ -48,7 +49,9 @@ function typeChar(state: State, char: string): State {
       : base === "" || base === "0"
         ? char
         : base + char;
+  const decimals = text.split(".")[1] ?? "";
   if (text.replace(".", "").length > MAX_DIGITS) return state;
+  if (decimals.length > MAX_DECIMALS) return state;
   return {
     ...state,
     text,

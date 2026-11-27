@@ -59,15 +59,15 @@ describe("calculator state", () => {
     [". 5", "0.5"],
     ["007", "7"],
     ["1234567890123456", "123456789012345"],
+    ["0.12345678901234567", "0.1234567890"],
+    ["1.123456789012", "1.1234567890"],
+    ["12345678901234.56", "12345678901234.5"],
   ])("typing %s gives %s", (keys, text) => {
     expect(run(keys).text).toBe(text);
   });
 
-  it("shows typed operands as typed, not rounded", () => {
-    expect(shown("0.00000000001 +")).toEqual([
-      "0.00000000001",
-      "0.00000000001 +",
-    ]);
+  it("shows typed operands as typed, not formatted", () => {
+    expect(shown("1234.5000 +")).toEqual(["1234.5000", "1234.5000 +"]);
   });
 
   it("replaces the display and drops the pending operator on a 400 error", () => {

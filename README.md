@@ -11,6 +11,7 @@ docker compose ps
 ```
 
 - Frontend: http://localhost:3000 (hot reload)
+- To share it through ngrok, run `ngrok http 3000`. The Vite dev server accepts `*.ngrok-free.dev` hosts (`server.allowedHosts` in `frontend/vite.config.ts`); add other tunnel domains there.
 
 The frontend calls the backend through the Vite proxy (`/api` → `http://backend:8080`), so no CORS setup is needed.
 
@@ -39,7 +40,7 @@ Every operation has its own endpoint, and the backend does all the math. It is p
 | POST | `/api/sqrt` | `{"firstOperand": 9}` | square root of firstOperand |
 | POST | `/api/percent` | `{"firstOperand": 15}` | firstOperand ÷ 100 |
 
-A success is `200 {"result": 5}`. Results are rounded to at most 10 decimal places, and `-0` becomes `0`.
+A success is `200 {"result": 5}`. Results are rounded to at most 10 decimal places and 15 significant digits, so every digit returned is exact (`123456789 ÷ 7` gives `17636684.1428571`), and `-0` becomes `0`. A result must lie between −999,999,999,999,999 and 999,999,999,999,999; a non-zero result that would round to `0` is an error.
 
 ```bash
 curl -s -X POST localhost:8080/api/add -H 'Content-Type: application/json' \
@@ -69,7 +70,8 @@ Anything the user can fix returns `400 {"error": "..."}`:
 | Can’t take the square root of a negative number | `sqrt` with `firstOperand` < 0 |
 | Can’t raise 0 to a negative power | `power` with `firstOperand` = 0 and `secondOperand` < 0 |
 | Result isn’t a real number | for example `power` of a negative base to a fractional power |
-| Result is too large to display | the result overflows |
+| Result is too large to display | the result has more than 15 digits before the decimal point (above 999,999,999,999,999 or below −999,999,999,999,999) |
+| Result is too small to display | the result is not zero but rounds to `0` at 10 decimals (closer to zero than 0.00000000005) |
 | Enter a number | an operand is missing or `null` |
 | Invalid request body | malformed JSON, an empty body, an unknown field, or a body over 1 KiB |
 
@@ -98,6 +100,8 @@ React + Vite + TypeScript with MUI (UI), Axios (HTTP) and TanStack Query (reques
 A small line above the display shows the pending operation (`5 +`) or the finished equation (`2 + 3 =`). An error such as dividing by zero shows its message on the display; a digit or `C` recovers. If the server can’t be reached (network, timeout of 10 s or a 5xx), a snackbar offers Retry and the calculator keeps its state.
 
 Keyboard: `0-9 .`, `+ - * / ^`, `Enter` or `=` (equals), `Backspace` (⌫), `Escape` (C), `r` (√) and `%`.
+
+Limits: you can type up to 15 digits, at most 10 of them after the decimal point. Results go from −999,999,999,999,999 to 999,999,999,999,999 with up to 10 decimals and 15 significant digits; the smallest result other than zero is 0.0000000001. Anything outside that shows "Result is too large to display" or "Result is too small to display", and a digit or `C` continues.
 
 ## Frontend tests
 

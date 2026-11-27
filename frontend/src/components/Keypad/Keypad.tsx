@@ -16,28 +16,27 @@ const KEY_APPEARANCE: Record<
 };
 
 interface KeypadProps {
-  loading: boolean;
+  disabled: boolean;
   onPress: (id: KeyId) => void;
 }
 
-export default function Keypad({ loading, onPress }: KeypadProps) {
+export default function Keypad({ disabled, onPress }: KeypadProps) {
   return (
     <Box sx={keypadSx}>
       {KEYPAD.map((keyDef) => {
         const { id, label, kind, aria } = keyDef;
-        const waiting = kind === "equals" && loading;
         return (
           <Button
             key={id}
             size="keypad"
             {...KEY_APPEARANCE[kind]}
             disableElevation={kind !== "equals"}
-            disabled={waiting}
+            disabled={disabled}
             aria-label={aria}
             onClick={() => onPress(id)}
             sx={keySx(keyDef)}
           >
-            {waiting ? "Calculating…" : label}
+            {label}
           </Button>
         );
       })}
