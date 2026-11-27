@@ -109,7 +109,7 @@ export default function App() {
           vertical: isMobile ? "top" : "bottom",
           horizontal: "center",
         }}
-        message="Couldn't reach the server. Your input is kept."
+        message="Couldn't calculate right now. Your input is kept."
         action={
           <>
             <Button

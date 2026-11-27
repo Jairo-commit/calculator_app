@@ -1,14 +1,6 @@
-import {
-  AxiosError,
-  type AxiosResponse,
-  type InternalAxiosRequestConfig,
-} from "axios";
-import { vi } from "vitest";
-import { api } from "../api/calculate";
+import { delay, http, HttpResponse } from "msw";
+import { setupServer } from "msw/node";
 import type { Operation, OperationCall } from "../lib/calculator";
-
-type Config = InternalAxiosRequestConfig;
-export type Adapter = (config: Config) => Promise<AxiosResponse>;
 
 export const DIVIDE_BY_ZERO = "Can’t divide by zero";
 
@@ -34,42 +26,50 @@ export function evaluate(
     : { result: OPERATIONS[call.operation](call.firstOperand, secondOperand) };
 }
 
-export function reply(
-  config: Config,
-  status: number,
-  data: unknown,
-): Promise<AxiosResponse> {
-  const response = { data, status, statusText: "", headers: {}, config };
-  return status < 300
-    ? Promise.resolve(response)
-    : Promise.reject(
-        new AxiosError(
-          "Request failed",
-          `ERR_${status}`,
-          config,
-          null,
-          response,
-        ),
-      );
+export const server = setupServer();
+
+export interface SentRequest {
+  path: string;
+  body: unknown;
 }
 
-export const fail =
-  (code: string): Adapter =>
-  (config) =>
-    Promise.reject(new AxiosError(code, code, config));
+export type Responder = (
+  operation: string,
+  body: unknown,
+) => Response | Promise<Response>;
 
-export const bodyOf = (config: Config): unknown => JSON.parse(config.data);
-
-export const fakeBackend: Adapter = (config) => {
-  const answer = evaluate({
-    ...(bodyOf(config) as object),
-    operation: (config.url ?? "").slice(1),
-  } as OperationCall);
-  return reply(config, "error" in answer ? 400 : 200, answer);
+export const calculates: Responder = (operation, body) => {
+  const answer = evaluate({ ...(body as object), operation } as OperationCall);
+  return HttpResponse.json(answer, { status: "error" in answer ? 400 : 200 });
 };
 
-export function stubBackend(adapter: Adapter = fakeBackend) {
-  const mock = vi.fn(adapter);
-  api.defaults.adapter = mock;
-  return mock;
+export const failsWithServerError: Responder = () =>
+  HttpResponse.json({ error: "Internal server error" }, { status: 500 });
+
+export const failsWithNetworkError: Responder = () => HttpResponse.error();
+
+export const neverAnswers: Responder = async () => {
+  await delay("infinite");
+  return HttpResponse.error();
+};
+
+export const failsOnceThenCalculates = (firstAnswer: Responder): Responder => {
+  let answered = false;
+  return (operation, body) => {
+    const responder = answered ? calculates : firstAnswer;
+    answered = true;
+    return responder(operation, body);
+  };
+};
+
+export function mockBackend(responder: Responder = calculates): SentRequest[] {
+  const sent: SentRequest[] = [];
+  server.use(
+    http.post("/api/:operation", async ({ request, params }) => {
+      const body = await request.json();
+      sent.push({ path: new URL(request.url).pathname, body });
+      return responder(String(params.operation), body);
+    }),
+  );
+  return sent;
 }

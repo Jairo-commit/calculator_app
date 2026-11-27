@@ -1,7 +1,8 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
-import { afterEach, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, vi } from "vitest";
 import { api } from "../api/calculate";
+import { server } from "./backend";
 
 let width = 1280;
 export const setViewportWidth = (pixels: number) => {
@@ -22,12 +23,17 @@ window.matchMedia = (query: string) => {
   } as unknown as MediaQueryList;
 };
 
-const realAdapter = api.defaults.adapter;
+const defaultTimeout = api.defaults.timeout;
+
+beforeAll(() => server.listen({ onUnhandledFrame: "error" }));
 
 afterEach(() => {
   cleanup();
   setViewportWidth(1280);
   localStorage.clear();
-  api.defaults.adapter = realAdapter;
+  server.resetHandlers();
+  api.defaults.timeout = defaultTimeout;
   vi.restoreAllMocks();
 });
+
+afterAll(() => server.close());

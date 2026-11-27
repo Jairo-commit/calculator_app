@@ -70,7 +70,7 @@ describe("calculator state", () => {
     ]);
   });
 
-  it("shows a 400 message, drops the operator and recovers only by digit or C", () => {
+  it("replaces the display and drops the pending operator on a 400 error", () => {
     const failed = run("1 / 0 =");
 
     expect(displayOf(failed)).toEqual({
@@ -78,11 +78,29 @@ describe("calculator state", () => {
       value: "Can’t divide by zero",
       isError: true,
     });
-    expect(run("+ = r . Backspace", failed).error).not.toBeNull();
+  });
+
+  it.each(["+", "=", "r", ".", "Backspace"])(
+    "keeps a 400 error when %s is pressed",
+    (keys) => {
+      const failed = run("1 / 0 =");
+
+      expect(run(keys, failed).error).not.toBeNull();
+    },
+  );
+
+  it("starts a new number when a digit follows a 400 error", () => {
+    const failed = run("1 / 0 =");
+
     expect(displayOf(run("5", failed))).toMatchObject({
       value: "5",
       isError: false,
     });
+  });
+
+  it("clears a 400 error with C", () => {
+    const failed = run("1 / 0 =");
+
     expect(run("Escape", failed).error).toBeNull();
   });
 
@@ -91,6 +109,9 @@ describe("calculator state", () => {
 
     expect(state.history).toHaveLength(8);
     expect(state.history[0]).toEqual({ expr: "√9", result: 3 });
+  });
+
+  it("labels a percent calculation as the number followed by %", () => {
     expect(run("15 %").history[0].expr).toBe("15%");
   });
 

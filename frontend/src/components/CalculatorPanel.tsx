@@ -68,6 +68,7 @@ export default function CalculatorPanel({
             minHeight: 20,
             fontFamily: "inherit",
             fontSize: 14,
+            overflowWrap: "anywhere",
             color: "text.secondary",
           }}
         >
