@@ -4,9 +4,16 @@ import Divider from "@mui/material/Divider";
 import List from "@mui/material/List";
 import ListItemButton from "@mui/material/ListItemButton";
 import Typography from "@mui/material/Typography";
-import { formatResult } from "../lib/calculator";
-import type { HistoryEntry } from "../lib/history";
-import { MONO_FONT } from "../theme";
+import { formatResult } from "../../lib/calculator";
+import type { HistoryEntry } from "../../lib/history";
+import {
+  emptyMessageSx,
+  entryExpressionSx,
+  entryResultSx,
+  entrySx,
+  headerSx,
+  headingSx,
+} from "./HistoryPanel.sx";
 
 interface HistoryPanelProps {
   history: readonly HistoryEntry[];
@@ -14,8 +21,6 @@ interface HistoryPanelProps {
   onReuse: (result: number) => void;
   onClear: () => void;
 }
-
-const mono = { display: "block", fontFamily: MONO_FONT } as const;
 
 export default function HistoryPanel({
   history,
@@ -25,20 +30,8 @@ export default function HistoryPanel({
 }: HistoryPanelProps) {
   return (
     <Box component="section" aria-labelledby="history-heading">
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          px: 2,
-          py: 1,
-        }}
-      >
-        <Typography
-          id="history-heading"
-          component="h2"
-          sx={{ fontSize: 16, fontWeight: 500 }}
-        >
+      <Box sx={headerSx}>
+        <Typography id="history-heading" component="h2" sx={headingSx}>
           History
         </Typography>
         <Button disabled={history.length === 0} onClick={onClear}>
@@ -47,7 +40,7 @@ export default function HistoryPanel({
       </Box>
       <Divider />
       {history.length === 0 ? (
-        <Typography color="text.secondary" sx={{ p: 5, textAlign: "center" }}>
+        <Typography sx={emptyMessageSx}>
           No calculations yet. Results you calculate will show up here.
         </Typography>
       ) : (
@@ -58,18 +51,12 @@ export default function HistoryPanel({
               disabled={disabled}
               aria-label={`Reuse ${expr} = ${formatResult(result)}`}
               onClick={() => onReuse(result)}
-              sx={{ minHeight: 44, display: "block", textAlign: "right" }}
+              sx={entrySx}
             >
-              <Typography
-                component="span"
-                sx={{ ...mono, fontSize: 14, color: "text.secondary" }}
-              >
+              <Typography component="span" sx={entryExpressionSx}>
                 {expr} =
               </Typography>
-              <Typography
-                component="span"
-                sx={{ ...mono, fontSize: 20, fontWeight: 500 }}
-              >
+              <Typography component="span" sx={entryResultSx}>
                 {formatResult(result)}
               </Typography>
             </ListItemButton>

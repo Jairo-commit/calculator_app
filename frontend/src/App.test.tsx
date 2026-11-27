@@ -3,18 +3,12 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import App from "./App";
-import { api } from "./api/calculate";
+import { delay, http, HttpResponse, type HttpResponseResolver } from "msw";
+import { apiClient } from "./api/client";
 import { HISTORY_KEY } from "./lib/history";
-import {
-  DIVIDE_BY_ZERO,
-  calculates,
-  failsOnceThenCalculates,
-  failsWithNetworkError,
-  failsWithServerError,
-  mockBackend,
-  neverAnswers,
-  type Responder,
-} from "./test/backend";
+import { DIVIDE_BY_ZERO, OPERATION_URL } from "./mocks/handlers";
+import { server } from "./mocks/node";
+import { recordRequests } from "./test/requests";
 import { setViewportWidth } from "./test/setup";
 
 function renderApp() {
@@ -38,24 +32,31 @@ function renderApp() {
   };
 }
 
-function heldBackend() {
+function holdResponses() {
   let release!: () => void;
   const released = new Promise<void>((resolve) => (release = resolve));
-  let answered!: () => void;
-  const answerSent = new Promise<void>((resolve) => (answered = resolve));
-  mockBackend(async (operation, body) => {
-    await released;
-    const response = await calculates(operation, body);
-    answered();
-    return response;
-  });
-  return {
-    answer: async () => {
-      release();
-      await answerSent;
-    },
+  server.use(
+    http.post(OPERATION_URL, async () => {
+      await released;
+    }),
+  );
+  return async () => {
+    const answered = new Promise<void>((resolve) =>
+      server.events.on("response:mocked", () => resolve()),
+    );
+    release();
+    await answered;
   };
 }
+
+const networkError: HttpResponseResolver = () => HttpResponse.error();
+
+const serverError: HttpResponseResolver = () =>
+  HttpResponse.json({ error: "Internal server error" }, { status: 500 });
+
+const neverAnswers: HttpResponseResolver = async () => {
+  await delay("infinite");
+};
 
 const shows = (element: HTMLElement, text: string) =>
   expect(element.textContent).toBe(text);
@@ -72,13 +73,14 @@ const saveHistoryEntry = () =>
   );
 
 async function failTwoPlusThree(
-  firstAnswer: Responder = failsWithNetworkError,
+  firstAnswer: HttpResponseResolver = networkError,
 ) {
-  const sent = mockBackend(failsOnceThenCalculates(firstAnswer));
+  const sentRequests = recordRequests();
+  server.use(http.post(OPERATION_URL, firstAnswer, { once: true }));
   const app = renderApp();
   await app.click("2", "Plus", "3", "Equals");
   await screen.findByText(SNACKBAR_TEXT);
-  return { app, sent };
+  return { app, sentRequests };
 }
 
 async function divideOneByZero(app: RenderedApp) {
@@ -88,19 +90,18 @@ async function divideOneByZero(app: RenderedApp) {
 
 describe("keypad and keyboard", () => {
   it("sends 2 + 3 = as one add request with both operands", async () => {
-    const sent = mockBackend();
+    const sentRequests = recordRequests();
     const app = renderApp();
 
     await app.click("2", "Plus", "3", "Equals");
 
     await waitFor(() => shows(app.value(), "5"));
-    expect(sent).toEqual([
+    expect(await sentRequests()).toEqual([
       { path: "/api/add", body: { firstOperand: 2, secondOperand: 3 } },
     ]);
   });
 
   it("shows the pending operation while the second number is typed", async () => {
-    mockBackend();
     const app = renderApp();
 
     await app.click("2", "Plus", "3");
@@ -109,7 +110,6 @@ describe("keypad and keyboard", () => {
   });
 
   it("shows the finished equation on the pending line after equals", async () => {
-    mockBackend();
     const app = renderApp();
 
     await app.click("2", "Plus", "3", "Equals");
@@ -118,7 +118,7 @@ describe("keypad and keyboard", () => {
   });
 
   it("focuses the panel again when the answer arrives", async () => {
-    const { answer } = heldBackend();
+    const answer = holdResponses();
     const app = renderApp();
     await app.click("2", "Plus", "3", "Equals");
 
@@ -128,7 +128,6 @@ describe("keypad and keyboard", () => {
   });
 
   it("calculates 12 + 30 typed on the physical keyboard", async () => {
-    mockBackend();
     const app = renderApp();
 
     await app.user.keyboard("12+30{Enter}");
@@ -137,7 +136,6 @@ describe("keypad and keyboard", () => {
   });
 
   it("ignores a digit pressed with Ctrl", async () => {
-    mockBackend();
     const app = renderApp();
 
     await app.user.keyboard("{Control>}7{/Control}");
@@ -146,7 +144,6 @@ describe("keypad and keyboard", () => {
   });
 
   it("treats Enter as equals when a keypad button has focus", async () => {
-    mockBackend();
     const app = renderApp();
     await app.click("9", "9", "9", "Plus", "1");
 
@@ -156,7 +153,7 @@ describe("keypad and keyboard", () => {
   });
 
   it("sends a result shown with a thousands separator as a plain number", async () => {
-    const sent = mockBackend();
+    const sentRequests = recordRequests();
     const app = renderApp();
     await app.click("9", "9", "9", "Plus", "1", "Equals");
     await waitFor(() => shows(app.value(), "1,000"));
@@ -164,7 +161,7 @@ describe("keypad and keyboard", () => {
     await app.click("Plus", "1", "Equals");
 
     await waitFor(() => shows(app.value(), "1,001"));
-    expect(sent[1].body).toEqual({
+    expect((await sentRequests())[1].body).toEqual({
       firstOperand: 1000,
       secondOperand: 1,
     });
@@ -173,7 +170,6 @@ describe("keypad and keyboard", () => {
 
 describe("errors", () => {
   it("shows a 400 error message on the display instead of the snackbar", async () => {
-    mockBackend();
     const app = renderApp();
 
     await divideOneByZero(app);
@@ -182,7 +178,6 @@ describe("errors", () => {
   });
 
   it("starts a new number when a digit follows a 400 error", async () => {
-    mockBackend();
     const app = renderApp();
     await divideOneByZero(app);
 
@@ -204,13 +199,13 @@ describe("errors", () => {
   });
 
   it("opens the snackbar on a 500", async () => {
-    await failTwoPlusThree(failsWithServerError);
+    await failTwoPlusThree(serverError);
 
     expect(snackbar()).not.toBeNull();
   });
 
   it("opens the snackbar when the request times out", async () => {
-    api.defaults.timeout = 50;
+    apiClient.defaults.timeout = 50;
 
     await failTwoPlusThree(neverAnswers);
 
@@ -218,12 +213,12 @@ describe("errors", () => {
   });
 
   it("resends the same operands on Retry", async () => {
-    const { app, sent } = await failTwoPlusThree();
+    const { app, sentRequests } = await failTwoPlusThree();
 
     await app.user.click(screen.getByRole("button", { name: "Retry" }));
 
     await waitFor(() => shows(app.value(), "5"));
-    expect(sent.map((request) => request.body)).toEqual([
+    expect((await sentRequests()).map((request) => request.body)).toEqual([
       { firstOperand: 2, secondOperand: 3 },
       { firstOperand: 2, secondOperand: 3 },
     ]);
@@ -267,7 +262,7 @@ describe("errors", () => {
 
 describe("while a request is pending", () => {
   it("ignores digits", async () => {
-    heldBackend();
+    holdResponses();
     const app = renderApp();
     await app.click("2", "Plus", "3", "Equals");
 
@@ -277,7 +272,7 @@ describe("while a request is pending", () => {
   });
 
   it("disables equals", async () => {
-    heldBackend();
+    holdResponses();
     const app = renderApp();
 
     await app.click("2", "Plus", "3", "Equals");
@@ -286,7 +281,7 @@ describe("while a request is pending", () => {
   });
 
   it("discards an answer that arrives after C", async () => {
-    const { answer } = heldBackend();
+    const answer = holdResponses();
     const app = renderApp();
     await app.click("2", "Plus", "3", "Equals");
     await app.click("Clear");
@@ -315,7 +310,6 @@ describe("history", () => {
   });
 
   it("saves a finished calculation to localStorage", async () => {
-    mockBackend();
     const app = renderApp();
 
     await app.click("2", "Plus", "3", "Equals");
@@ -328,7 +322,7 @@ describe("history", () => {
 
   it("disables history entries while a request is pending", async () => {
     saveHistoryEntry();
-    heldBackend();
+    holdResponses();
     const app = renderApp();
 
     await app.click("1", "Plus", "1", "Equals");

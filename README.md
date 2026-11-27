@@ -101,7 +101,7 @@ Keyboard: `0-9 .`, `+ - * / ^`, `Enter` or `=` (equals), `Backspace` (⌫), `Esc
 
 ## Frontend tests
 
-Vitest and Testing Library run in Docker. [MSW](https://mswjs.io) answers the `/api` requests at the network level (`src/test/backend.ts`), so no backend is needed. Any request without a handler fails the test. MSW needs Node 22.12 or newer, which the frontend image has.
+Vitest and Testing Library run in Docker. [MSW](https://mswjs.io) answers the `/api` requests at the network level, so no backend is needed. The handlers are in `src/mocks/handlers.ts`, the one server in `src/mocks/node.ts`, and tests override a handler with `server.use()`. Any request without a handler fails the test. MSW needs Node 22.12 or newer, which the frontend image has.
 
 ```bash
 docker compose run --rm --no-deps frontend npm test

@@ -13,8 +13,9 @@ import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { useEffect, useRef, useState } from "react";
-import CalculatorPanel from "./components/CalculatorPanel";
-import HistoryPanel from "./components/HistoryPanel";
+import { historyPaperSx, mainSx, titleSx } from "./App.sx";
+import CalculatorPanel from "./components/CalculatorPanel/CalculatorPanel";
+import HistoryPanel from "./components/HistoryPanel/HistoryPanel";
 import { useCalculator } from "./hooks/useCalculator";
 
 export default function App() {
@@ -50,7 +51,7 @@ export default function App() {
     <>
       <AppBar position="static">
         <Toolbar>
-          <Typography component="h1" variant="h6" sx={{ flexGrow: 1 }}>
+          <Typography component="h1" variant="h6" sx={titleSx}>
             Calculator
           </Typography>
           {isMobile && (
@@ -67,11 +68,7 @@ export default function App() {
         </Toolbar>
       </AppBar>
 
-      <Container
-        component="main"
-        maxWidth={false}
-        sx={{ maxWidth: 1040, py: { xs: 2, md: 5 } }}
-      >
+      <Container component="main" maxWidth={false} sx={mainSx}>
         <Stack
           direction={{ xs: "column", md: "row" }}
           gap={3}
@@ -84,7 +81,7 @@ export default function App() {
             panelRef={panelRef}
           />
           {!isMobile && (
-            <Paper elevation={2} sx={{ flex: "1 1 300px", minWidth: 0 }}>
+            <Paper elevation={2} sx={historyPaperSx}>
               {history}
             </Paper>
           )}
