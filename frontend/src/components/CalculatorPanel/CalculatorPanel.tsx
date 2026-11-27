@@ -9,7 +9,6 @@ import Keypad from "../Keypad/Keypad";
 import {
   outputSx,
   panelSx,
-  pendingLineSx,
   progressSlotSx,
   valueSx,
 } from "./CalculatorPanel.sx";
@@ -42,17 +41,16 @@ export default function CalculatorPanel({
       aria-label="Calculator"
       tabIndex={0}
       onKeyDown={onKeyDown}
-      elevation={2}
       sx={panelSx}
     >
       <Box component="output" aria-live="polite" sx={outputSx}>
-        <Typography component="span" data-testid="pending" sx={pendingLineSx}>
+        <Typography variant="pendingLine" data-testid="pending">
           {display.pending}
         </Typography>
         <Typography
-          component="span"
+          variant={display.isError ? "displayError" : "display"}
           data-testid="value"
-          sx={valueSx(display.isError)}
+          sx={valueSx}
         >
           {display.value}
         </Typography>

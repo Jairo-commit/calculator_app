@@ -6,14 +6,7 @@ import ListItemButton from "@mui/material/ListItemButton";
 import Typography from "@mui/material/Typography";
 import { formatResult } from "../../lib/calculator";
 import type { HistoryEntry } from "../../lib/history";
-import {
-  emptyMessageSx,
-  entryExpressionSx,
-  entryResultSx,
-  entrySx,
-  headerSx,
-  headingSx,
-} from "./HistoryPanel.sx";
+import { emptyMessageSx, entrySx, headerSx } from "./HistoryPanel.sx";
 
 interface HistoryPanelProps {
   history: readonly HistoryEntry[];
@@ -31,7 +24,7 @@ export default function HistoryPanel({
   return (
     <Box component="section" aria-labelledby="history-heading">
       <Box sx={headerSx}>
-        <Typography id="history-heading" component="h2" sx={headingSx}>
+        <Typography id="history-heading" component="h2" variant="subtitle1">
           History
         </Typography>
         <Button disabled={history.length === 0} onClick={onClear}>
@@ -40,7 +33,7 @@ export default function HistoryPanel({
       </Box>
       <Divider />
       {history.length === 0 ? (
-        <Typography sx={emptyMessageSx}>
+        <Typography color="text.secondary" sx={emptyMessageSx}>
           No calculations yet. Results you calculate will show up here.
         </Typography>
       ) : (
@@ -53,10 +46,8 @@ export default function HistoryPanel({
               onClick={() => onReuse(result)}
               sx={entrySx}
             >
-              <Typography component="span" sx={entryExpressionSx}>
-                {expr} =
-              </Typography>
-              <Typography component="span" sx={entryResultSx}>
+              <Typography variant="historyExpression">{expr} =</Typography>
+              <Typography variant="historyResult">
                 {formatResult(result)}
               </Typography>
             </ListItemButton>

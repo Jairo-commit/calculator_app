@@ -80,11 +80,7 @@ export default function App() {
             display={calculator.display}
             panelRef={panelRef}
           />
-          {!isMobile && (
-            <Paper elevation={2} sx={historyPaperSx}>
-              {history}
-            </Paper>
-          )}
+          {!isMobile && <Paper sx={historyPaperSx}>{history}</Paper>}
         </Stack>
       </Container>
 
