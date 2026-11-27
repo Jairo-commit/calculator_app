@@ -24,7 +24,7 @@ export interface State {
   finishedEquation: string | null;
 }
 
-export type Action =
+type Action =
   | { type: "key"; id: KeyId }
   | { type: "succeeded"; request: OperationRequest; result: number }
   | { type: "rejected"; message: string };

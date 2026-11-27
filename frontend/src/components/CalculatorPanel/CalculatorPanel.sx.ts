@@ -1,14 +1,14 @@
 import type { SxProps, Theme } from "@mui/material/styles";
 
-export const panelSx: SxProps<Theme> = {
+export const panelSx: SxProps<Theme> = (theme) => ({
   overflow: "hidden",
   outline: "none",
   "&:focus-visible": {
     outline: "2px solid",
-    outlineColor: "primary.main",
+    outlineColor: theme.palette.primary.main,
     outlineOffset: -2,
   },
-};
+});
 
 export const outputSx: SxProps<Theme> = {
   display: "block",

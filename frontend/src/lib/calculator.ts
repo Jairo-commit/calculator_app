@@ -1,6 +1,6 @@
 export type BinaryOperation =
   "add" | "subtract" | "multiply" | "divide" | "power";
-export type UnaryOperation = "sqrt" | "percent";
+type UnaryOperation = "sqrt" | "percent";
 export type Operation = BinaryOperation | UnaryOperation;
 export type OperationCall =
   | { operation: UnaryOperation; firstOperand: number }

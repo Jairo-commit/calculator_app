@@ -1,6 +1,6 @@
 import { server } from "../mocks/node";
 
-export interface SentRequest {
+interface SentRequest {
   path: string;
   body: unknown;
 }
