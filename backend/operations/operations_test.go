@@ -1,9 +1,11 @@
-package calc
+package operations
 
 import (
 	"errors"
 	"math"
 	"testing"
+
+	"calculator_app/backend/models"
 )
 
 func TestResults(t *testing.T) {
@@ -18,8 +20,8 @@ func TestResults(t *testing.T) {
 		{"sqrt", func() (float64, error) { return Sqrt(9) }, 3},
 		{"percent", func() (float64, error) { return Percent(15) }, 0.15},
 		{"values above 1e15 keep their fraction", func() (float64, error) { return Add(1e15, 0.5) }, 1e15 + 0.5},
-		{"large integers stay exact", func() (float64, error) { return Add(994399757, 0) }, 994399757},
-		{"larger integers stay exact", func() (float64, error) { return Multiply(7439835882, 1) }, 7439835882},
+		{"integers above 1e9 stay exact", func() (float64, error) { return Multiply(7439835882, 1) }, 7439835882},
+		{"rounds to 10 decimals", func() (float64, error) { return Divide(1, 3) }, 0.3333333333},
 	}
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -46,8 +48,8 @@ func TestErrors(t *testing.T) {
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			_, err := testCase.got()
-			var calcErr *Error
-			if !errors.As(err, &calcErr) || calcErr.Message != testCase.want {
+			var calculationError *models.CalculationError
+			if !errors.As(err, &calculationError) || calculationError.Message != testCase.want {
 				t.Errorf("got %v; want %q", err, testCase.want)
 			}
 		})

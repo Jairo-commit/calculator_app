@@ -1,20 +1,18 @@
-package calc
+package operations
 
 import (
 	"math"
 	"strconv"
+
+	"calculator_app/backend/models"
 )
 
-type Error struct{ Message string }
-
-func (calcError *Error) Error() string { return calcError.Message }
-
 var (
-	errDivZero      = &Error{"Can’t divide by zero"}
-	errSqrtNegative = &Error{"Can’t take the square root of a negative number"}
-	errZeroNegPower = &Error{"Can’t raise 0 to a negative power"}
-	errNotReal      = &Error{"Result isn’t a real number"}
-	errTooLarge     = &Error{"Result is too large to display"}
+	errDivZero      = &models.CalculationError{Message: "Can’t divide by zero"}
+	errSqrtNegative = &models.CalculationError{Message: "Can’t take the square root of a negative number"}
+	errZeroNegPower = &models.CalculationError{Message: "Can’t raise 0 to a negative power"}
+	errNotReal      = &models.CalculationError{Message: "Result isn’t a real number"}
+	errTooLarge     = &models.CalculationError{Message: "Result is too large to display"}
 )
 
 func finish(value float64) (float64, error) {
