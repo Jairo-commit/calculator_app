@@ -113,4 +113,3 @@ The prompt used to build this project was to follow [DESIGN.md](DESIGN.md), the 
 - **`%` divides the number on screen by 100**, so `80 × 15 % =` gives `12`.
 - **No minus key**; negative numbers come from results, e.g. `0 − 5 =`.
 - **No history or saved state**; reloading the page starts from `0`.
-- **Docker runs development servers** (`go run .` and Vite), which suits this exercise. A production deployment would build a static frontend and a compiled Go binary.
