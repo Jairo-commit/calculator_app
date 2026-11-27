@@ -1,7 +1,7 @@
 import { AxiosError } from "axios";
 import { delay, http, HttpResponse } from "msw";
 import { describe, expect, it } from "vitest";
-import type { OperationCall } from "../lib/calculator";
+import type { OperationCall } from "../models/operationCall";
 import { OPERATION_URL } from "../mocks/handlers";
 import { server } from "../mocks/node";
 import { recordRequests } from "../test/requests";
@@ -40,9 +40,9 @@ describe("callOperation", () => {
 
   it("does not compile a two-number operation without its second operand", () => {
     // @ts-expect-error secondOperand is required for add
-    const call: OperationCall = { operation: "add", firstOperand: 2 };
+    const operationCall: OperationCall = { operation: "add", firstOperand: 2 };
 
-    expect(call.operation).toBe("add");
+    expect(operationCall.operation).toBe("add");
   });
 
   it("maps a 400 to ApiValidationError with the server message", async () => {

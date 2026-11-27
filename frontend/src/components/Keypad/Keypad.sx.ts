@@ -1,5 +1,5 @@
 import type { SxProps, Theme } from "@mui/material/styles";
-import type { KeyDef } from "../../lib/calculator";
+import type { KeyDef } from "../../models/key";
 
 export const keypadSx: SxProps<Theme> = (theme) => ({
   bgcolor: theme.palette.background.keypad,

@@ -1,52 +1,58 @@
 import { useMutation } from "@tanstack/react-query";
 import { useReducer, useState } from "react";
 import { ApiValidationError, callOperation } from "../api/calculate";
-import type { KeyId } from "../lib/calculator";
 import {
   displayOf,
   initialState,
   reducer,
   requestFor,
-  type OperationRequest,
-} from "../lib/calculatorState";
+} from "../lib/calculatorReducer";
+import type { KeyId } from "../models/key";
+import type { OperationRequest } from "../models/operationRequest";
 
 export function useCalculator() {
-  const [state, dispatch] = useReducer(reducer, initialState);
-  const [snackbarOpen, setSnackbarOpen] = useState(false);
-  const { mutate, reset, isPending, variables } = useMutation({
-    mutationFn: ({ call }: OperationRequest) => callOperation(call),
+  const [calculatorState, dispatch] = useReducer(reducer, initialState);
+  const [isSnackbarOpen, setIsSnackbarOpen] = useState(false);
+  const {
+    mutate: postOperation,
+    reset: discardRequest,
+    isPending: isCalculating,
+    variables: lastRequest,
+  } = useMutation({
+    mutationFn: ({ operationCall }: OperationRequest) =>
+      callOperation(operationCall),
   });
 
-  const send = (request: OperationRequest) =>
-    mutate(request, {
+  const sendRequest = (request: OperationRequest) =>
+    postOperation(request, {
       onSuccess: (result) => dispatch({ type: "succeeded", request, result }),
       onError: (error) =>
         error instanceof ApiValidationError
           ? dispatch({ type: "rejected", message: error.message })
-          : setSnackbarOpen(true),
+          : setIsSnackbarOpen(true),
     });
 
-  const press = (id: KeyId) => {
-    if (id === "clear") reset();
-    else if (isPending) return;
-    setSnackbarOpen(false);
-    const request = requestFor(state, id);
-    if (request) send(request);
-    else dispatch({ type: "key", id });
+  const press = (keyId: KeyId) => {
+    if (keyId === "clear") discardRequest();
+    else if (isCalculating) return;
+    setIsSnackbarOpen(false);
+    const request = requestFor(calculatorState, keyId);
+    if (request) sendRequest(request);
+    else dispatch({ type: "key", id: keyId });
   };
 
   return {
     press,
-    loading: isPending,
-    display: displayOf(state),
-    snackbarOpen,
-    dismiss: () => setSnackbarOpen(false),
+    loading: isCalculating,
+    display: displayOf(calculatorState),
+    snackbarOpen: isSnackbarOpen,
+    dismiss: () => setIsSnackbarOpen(false),
     retry: () => {
-      if (!variables) {
+      if (!lastRequest) {
         throw new Error("Retry pressed without a failed request");
       }
-      setSnackbarOpen(false);
-      send(variables);
+      setIsSnackbarOpen(false);
+      sendRequest(lastRequest);
     },
   };
 }

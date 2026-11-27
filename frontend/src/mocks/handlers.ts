@@ -1,5 +1,7 @@
 import { http, HttpResponse } from "msw";
-import type { Operation, OperationCall } from "../lib/calculator";
+import type { ErrorResponse, ResultResponse } from "../models/apiResponses";
+import type { Operation } from "../models/operation";
+import type { OperationCall } from "../models/operationCall";
 
 export const OPERATION_URL = "/api/:operation";
 
@@ -19,12 +21,18 @@ const OPERATIONS: Record<
 };
 
 export function evaluate(
-  call: OperationCall,
-): { result: number } | { error: string } {
-  const secondOperand = "secondOperand" in call ? call.secondOperand : 0;
-  return call.operation === "divide" && secondOperand === 0
+  operationCall: OperationCall,
+): ResultResponse | ErrorResponse {
+  const secondOperand =
+    "secondOperand" in operationCall ? operationCall.secondOperand : 0;
+  return operationCall.operation === "divide" && secondOperand === 0
     ? { error: DIVIDE_BY_ZERO }
-    : { result: OPERATIONS[call.operation](call.firstOperand, secondOperand) };
+    : {
+        result: OPERATIONS[operationCall.operation](
+          operationCall.firstOperand,
+          secondOperand,
+        ),
+      };
 }
 
 export const handlers = [

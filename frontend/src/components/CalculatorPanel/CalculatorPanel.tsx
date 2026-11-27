@@ -3,8 +3,9 @@ import LinearProgress from "@mui/material/LinearProgress";
 import Paper from "@mui/material/Paper";
 import Typography from "@mui/material/Typography";
 import type { KeyboardEvent, RefObject } from "react";
-import { keyIdFor, type KeyId } from "../../lib/calculator";
-import type { Display } from "../../lib/calculatorState";
+import { keyIdFor } from "../../lib/keys";
+import type { Display } from "../../models/display";
+import type { KeyId } from "../../models/key";
 import Keypad from "../Keypad/Keypad";
 import {
   outputSx,
