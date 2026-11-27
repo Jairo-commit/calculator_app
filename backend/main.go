@@ -1,19 +1,29 @@
 package main
 
 import (
-	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+
+	"calculator_app/backend/handlers"
 )
 
+func newRouter() *http.ServeMux {
+	router := http.NewServeMux()
+
+	router.HandleFunc("POST /api/add", handlers.Add)
+	router.HandleFunc("POST /api/subtract", handlers.Subtract)
+	router.HandleFunc("POST /api/multiply", handlers.Multiply)
+	router.HandleFunc("POST /api/divide", handlers.Divide)
+	router.HandleFunc("POST /api/power", handlers.Power)
+
+	router.HandleFunc("POST /api/sqrt", handlers.Sqrt)
+	router.HandleFunc("POST /api/percent", handlers.Percent)
+
+	return router
+}
+
 func main() {
-	mux := http.NewServeMux()
-
-	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-	})
-
-	log.Println("backend listening on :8080")
-	log.Fatal(http.ListenAndServe(":8080", mux))
+	fmt.Println("Server started on port", 8080)
+	log.Fatal(http.ListenAndServe(":8080", newRouter()))
 }
