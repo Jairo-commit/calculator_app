@@ -21,15 +21,11 @@ declare module "@mui/material/styles" {
     display: CSSProperties;
     displayError: CSSProperties;
     pendingLine: CSSProperties;
-    historyExpression: CSSProperties;
-    historyResult: CSSProperties;
   }
   interface TypographyVariantsOptions {
     display?: CSSProperties;
     displayError?: CSSProperties;
     pendingLine?: CSSProperties;
-    historyExpression?: CSSProperties;
-    historyResult?: CSSProperties;
   }
 }
 
@@ -50,8 +46,6 @@ declare module "@mui/material/Typography" {
     display: true;
     displayError: true;
     pendingLine: true;
-    historyExpression: true;
-    historyResult: true;
   }
 }
 
@@ -91,12 +85,9 @@ const { palette } = baseTheme;
 
 export const theme = createTheme(baseTheme, {
   typography: {
-    subtitle1: { fontWeight: 500 },
     display: monoBlock(48, palette.text.primary),
     displayError: monoBlock(24, palette.error.main),
     pendingLine: { ...monoBlock(14, palette.text.secondary), minHeight: 20 },
-    historyExpression: monoBlock(14, palette.text.secondary),
-    historyResult: { ...monoBlock(20, palette.text.primary), fontWeight: 500 },
   },
   components: {
     MuiPaper: {
@@ -108,8 +99,6 @@ export const theme = createTheme(baseTheme, {
           display: "span",
           displayError: "span",
           pendingLine: "span",
-          historyExpression: "span",
-          historyResult: "span",
         },
       },
     },

@@ -10,7 +10,6 @@ A calculator that works like an old pocket calculator. The React frontend only h
 - `√` and `%` act right away on the number on screen (`%` divides by 100).
 - `⌫` deletes the last digit, `C` clears everything.
 - A small line above the display shows what is pending, e.g. `5 +`.
-- The last 8 results are kept in a history panel (saved in the browser). Clicking one reuses its result.
 - The physical keyboard works too: digits, `+ - * / ^`, `Enter` for `=`, `Backspace`, `Esc` for C.
 
 ## Keypad
@@ -56,9 +55,9 @@ backend/
 
 frontend/src/
   App.tsx          page layout
-  components/      calculator panel, keypad, history
+  components/      calculator panel, keypad
   hooks/           useCalculator: state + API calls
-  lib/             keypad, state machine, history
+  lib/             keypad, state machine
   api/             the HTTP client
 ```
 

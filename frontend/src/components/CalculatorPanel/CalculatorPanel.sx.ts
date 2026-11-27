@@ -1,9 +1,6 @@
 import type { SxProps, Theme } from "@mui/material/styles";
 
 export const panelSx: SxProps<Theme> = {
-  flex: { md: "1 1 420px" },
-  maxWidth: { md: 560 },
-  minWidth: 0,
   overflow: "hidden",
   outline: "none",
   "&:focus-visible": {

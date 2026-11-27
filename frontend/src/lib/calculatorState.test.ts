@@ -9,7 +9,7 @@ import {
   type State,
 } from "./calculatorState";
 
-function run(keys: string, from: State = initialState()): State {
+function run(keys: string, from: State = initialState): State {
   let state = from;
   for (const token of keys.split(" ")) {
     for (const keyName of keyIdFor(token) ? [token] : [...token]) {
@@ -102,25 +102,5 @@ describe("calculator state", () => {
     const failed = run("1 / 0 =");
 
     expect(run("Escape", failed).error).toBeNull();
-  });
-
-  it("keeps the 8 newest calculations", () => {
-    const state = run("1 + 1 = ".repeat(8) + "9 r");
-
-    expect(state.history).toHaveLength(8);
-    expect(state.history[0]).toEqual({ expr: "√9", result: 3 });
-  });
-
-  it("labels a percent calculation as the number followed by %", () => {
-    expect(run("15 %").history[0].expr).toBe("15%");
-  });
-
-  it("loads a history result as a fresh number, or as the second operand", () => {
-    expect(
-      displayOf(reducer(run("7"), { type: "reuse", result: 1234.5 })).value,
-    ).toBe("1,234.5");
-
-    const reused = reducer(run("2 +"), { type: "reuse", result: 8 });
-    expect(displayOf(run("=", reused)).value).toBe("10");
   });
 });

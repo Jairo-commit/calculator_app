@@ -6,13 +6,11 @@ import {
   type KeyId,
   type OperationCall,
 } from "./calculator";
-import { HISTORY_LIMIT, loadHistory, type HistoryEntry } from "./history";
 
 const MAX_DIGITS = 15;
 
 export interface OperationRequest {
   call: OperationCall;
-  label: string;
   triggerKey: KeyId;
 }
 
@@ -24,17 +22,14 @@ export interface State {
   hasSecondOperand: boolean;
   error: string | null;
   finishedEquation: string | null;
-  history: HistoryEntry[];
 }
 
 export type Action =
   | { type: "key"; id: KeyId }
   | { type: "succeeded"; request: OperationRequest; result: number }
-  | { type: "rejected"; message: string }
-  | { type: "reuse"; result: number }
-  | { type: "clearHistory" };
+  | { type: "rejected"; message: string };
 
-const BLANK = {
+export const initialState: State = {
   text: "0",
   value: 0,
   startsNewNumber: false,
@@ -42,12 +37,7 @@ const BLANK = {
   hasSecondOperand: false,
   error: null,
   finishedEquation: null,
-} as const;
-
-export const initialState = (): State => ({
-  ...BLANK,
-  history: loadHistory(),
-});
+};
 
 function typeChar(state: State, char: string): State {
   const base = state.startsNewNumber ? "" : state.text;
@@ -71,7 +61,7 @@ function typeChar(state: State, char: string): State {
 }
 
 function press(state: State, id: KeyId): State {
-  if (id === "clear") return { ...BLANK, history: state.history };
+  if (id === "clear") return initialState;
   if (/^\d$/.test(id)) return typeChar(state, id);
   if (state.error !== null) return state;
   if (id === "decimal") return typeChar(state, ".");
@@ -95,17 +85,9 @@ function press(state: State, id: KeyId): State {
 
 export function requestFor(state: State, id: KeyId): OperationRequest | null {
   if (state.error !== null) return null;
-  if (id === "sqrt") {
+  if (id === "sqrt" || id === "percent") {
     return {
       call: { operation: id, firstOperand: state.value },
-      label: `√${state.text}`,
-      triggerKey: id,
-    };
-  }
-  if (id === "percent") {
-    return {
-      call: { operation: id, firstOperand: state.value },
-      label: `${state.text}%`,
       triggerKey: id,
     };
   }
@@ -116,13 +98,15 @@ export function requestFor(state: State, id: KeyId): OperationRequest | null {
   ) {
     return null;
   }
-  const { operation, value, text } = state.pending;
+  const { operation, value } = state.pending;
   return {
     call: { operation, firstOperand: value, secondOperand: state.value },
-    label: `${text} ${OPERATION_SYMBOLS[operation]} ${state.text}`,
     triggerKey: id,
   };
 }
+
+const pendingLine = ({ text, operation }: NonNullable<State["pending"]>) =>
+  `${text} ${OPERATION_SYMBOLS[operation]}`;
 
 function applyResult(
   state: State,
@@ -138,17 +122,16 @@ function applyResult(
     hasSecondOperand: true,
     error: null,
     finishedEquation: null,
-    history: [{ expr: request.label, result }, ...state.history].slice(
-      0,
-      HISTORY_LIMIT,
-    ),
   };
   if (request.triggerKey === "equals") {
+    if (!state.pending) {
+      throw new Error("Equals answered without a pending operation");
+    }
     return {
       ...shown,
       pending: null,
       hasSecondOperand: false,
-      finishedEquation: `${request.label} =`,
+      finishedEquation: `${pendingLine(state.pending)} ${state.text} =`,
     };
   }
   if (isBinaryOperation(request.triggerKey)) {
@@ -169,23 +152,10 @@ export function reducer(state: State, action: Action): State {
       return applyResult(state, action.request, action.result);
     case "rejected":
       return {
-        ...BLANK,
-        history: state.history,
+        ...initialState,
         error: action.message,
         startsNewNumber: true,
       };
-    case "reuse":
-      return {
-        ...state,
-        text: formatResult(action.result),
-        value: action.result,
-        startsNewNumber: true,
-        hasSecondOperand: state.pending !== null,
-        error: null,
-        finishedEquation: null,
-      };
-    case "clearHistory":
-      return { ...state, history: [] };
   }
 }
 
@@ -197,7 +167,7 @@ export interface Display {
 
 export const displayOf = (state: State): Display => ({
   pending: state.pending
-    ? `${state.pending.text} ${OPERATION_SYMBOLS[state.pending.operation]}`
+    ? pendingLine(state.pending)
     : (state.finishedEquation ?? ""),
   value: state.error ?? state.text,
   isError: state.error !== null,

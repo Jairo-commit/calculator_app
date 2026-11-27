@@ -95,7 +95,7 @@ React + Vite + TypeScript with MUI (UI), Axios (HTTP) and TanStack Query (reques
 4. After `=`, a digit starts a new number and an operator continues from the result.
 5. `⌫` removes the last digit, and `C` resets everything.
 
-A small line above the display shows the pending operation (`5 +`) or the finished equation (`2 + 3 =`). An error such as dividing by zero shows its message on the display; a digit or `C` recovers. If the server can’t be reached (network, timeout of 10 s or a 5xx), a snackbar offers Retry and the calculator keeps its state. The history keeps the last 8 calculations in `localStorage`; clicking one loads its result. Below 900px wide the history is a drawer. The design spec is in [DESIGN.md](DESIGN.md).
+A small line above the display shows the pending operation (`5 +`) or the finished equation (`2 + 3 =`). An error such as dividing by zero shows its message on the display; a digit or `C` recovers. If the server can’t be reached (network, timeout of 10 s or a 5xx), a snackbar offers Retry and the calculator keeps its state. The design spec is in [DESIGN.md](DESIGN.md).
 
 Keyboard: `0-9 .`, `+ - * / ^`, `Enter` or `=` (equals), `Backspace` (⌫), `Escape` (C), `r` (√) and `%`.
 

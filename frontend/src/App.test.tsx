@@ -5,11 +5,9 @@ import { describe, expect, it } from "vitest";
 import App from "./App";
 import { delay, http, HttpResponse, type HttpResponseResolver } from "msw";
 import { apiClient } from "./api/client";
-import { HISTORY_KEY } from "./lib/history";
 import { DIVIDE_BY_ZERO, OPERATION_URL } from "./mocks/handlers";
 import { server } from "./mocks/node";
 import { recordRequests } from "./test/requests";
-import { setViewportWidth } from "./test/setup";
 
 function renderApp() {
   const user = userEvent.setup();
@@ -65,12 +63,6 @@ const SNACKBAR_TEXT = /Couldn't calculate right now/;
 const snackbar = () => screen.queryByText(SNACKBAR_TEXT);
 
 type RenderedApp = ReturnType<typeof renderApp>;
-
-const saveHistoryEntry = () =>
-  localStorage.setItem(
-    HISTORY_KEY,
-    JSON.stringify([{ expr: "2 + 3", result: 5 }]),
-  );
 
 async function failTwoPlusThree(
   firstAnswer: HttpResponseResolver = networkError,
@@ -234,13 +226,7 @@ describe("errors", () => {
       (app) => app.user.click(screen.getByRole("button", { name: "Dismiss" })),
     ],
     ["a digit", (app) => app.click("4")],
-    [
-      "reusing a history entry",
-      (app) =>
-        app.user.click(screen.getByRole("button", { name: /Reuse 2 \+ 3/ })),
-    ],
   ])("%s closes the snackbar", async (_closer, close) => {
-    saveHistoryEntry();
     const { app } = await failTwoPlusThree();
 
     await close(app);
@@ -290,128 +276,5 @@ describe("while a request is pending", () => {
     await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
 
     shows(app.value(), "0");
-    expect(localStorage.getItem(HISTORY_KEY)).toBe("[]");
-  });
-});
-
-describe("history", () => {
-  const historyButton = (name: RegExp | string) =>
-    within(screen.getByRole("region", { name: "History" })).getByRole(
-      "button",
-      { name },
-    );
-
-  it("shows an empty message before the first calculation", () => {
-    renderApp();
-
-    expect(
-      screen.queryByText("No calculations yet", { exact: false }),
-    ).not.toBeNull();
-  });
-
-  it("saves a finished calculation to localStorage", async () => {
-    const app = renderApp();
-
-    await app.click("2", "Plus", "3", "Equals");
-
-    await waitFor(() => shows(app.value(), "5"));
-    expect(JSON.parse(localStorage.getItem(HISTORY_KEY)!)).toEqual([
-      { expr: "2 + 3", result: 5 },
-    ]);
-  });
-
-  it("disables history entries while a request is pending", async () => {
-    saveHistoryEntry();
-    holdResponses();
-    const app = renderApp();
-
-    await app.click("1", "Plus", "1", "Equals");
-
-    expect(historyButton(/Reuse 2 \+ 3/)).toHaveAttribute(
-      "aria-disabled",
-      "true",
-    );
-  });
-
-  it("loads a history result into the display when clicked", async () => {
-    saveHistoryEntry();
-    const app = renderApp();
-
-    await app.user.click(historyButton(/Reuse 2 \+ 3/));
-
-    shows(app.value(), "5");
-  });
-
-  it("focuses the panel after reusing a history entry", async () => {
-    saveHistoryEntry();
-    const app = renderApp();
-
-    await app.user.click(historyButton(/Reuse 2 \+ 3/));
-
-    expect(app.panel).toHaveFocus();
-  });
-
-  it("empties the history when Clear is clicked", async () => {
-    saveHistoryEntry();
-    const app = renderApp();
-
-    await app.user.click(historyButton("Clear"));
-
-    expect(screen.queryByRole("button", { name: /Reuse/ })).toBeNull();
-  });
-
-  it("focuses the panel after clearing the history", async () => {
-    saveHistoryEntry();
-    const app = renderApp();
-
-    await app.user.click(historyButton("Clear"));
-
-    expect(app.panel).toHaveFocus();
-  });
-});
-
-describe("history below 900px", () => {
-  async function reuseFromDrawer() {
-    saveHistoryEntry();
-    setViewportWidth(390);
-    const app = renderApp();
-    await app.user.click(screen.getByRole("button", { name: "Open history" }));
-    await app.user.click(
-      await screen.findByRole("button", { name: /Reuse 2 \+ 3/ }),
-    );
-    return app;
-  }
-
-  it("is hidden until the drawer is opened", () => {
-    saveHistoryEntry();
-    setViewportWidth(390);
-
-    renderApp();
-
-    expect(screen.queryByText("History")).toBeNull();
-  });
-
-  it("opens in a drawer from the app bar", async () => {
-    saveHistoryEntry();
-    setViewportWidth(390);
-    const app = renderApp();
-
-    await app.user.click(screen.getByRole("button", { name: "Open history" }));
-
-    expect(
-      await screen.findByRole("button", { name: /Reuse 2 \+ 3/ }),
-    ).toBeVisible();
-  });
-
-  it("closes the drawer after reusing an entry", async () => {
-    await reuseFromDrawer();
-
-    await waitFor(() => expect(screen.queryByText("History")).toBeNull());
-  });
-
-  it("focuses the panel after reusing an entry from the drawer", async () => {
-    const app = await reuseFromDrawer();
-
-    await waitFor(() => expect(app.panel).toHaveFocus());
   });
 });
